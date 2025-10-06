@@ -897,24 +897,51 @@ class GridTradingBot:
         
         self.logger.info("🔄 Iniciando shutdown...")
         
-        # Cancelar todas as ordens
-        # if self.strategy:
-        #     self.logger.info("🚫 Cancelando ordens ativas...")
-        #     self.strategy.cancel_all_orders()
+        # Cancel all open orders
+        if self.position_mgr:
+            self.logger.info("🚫 Cancelando todas as ordens abertas...")
+            try:
+                # Get all open orders
+                open_orders = self.auth.get_open_orders()
+                if open_orders:
+                    # Filter orders for our symbol
+                    symbol_orders = [o for o in open_orders if o.get('symbol') == self.symbol]
+                    if symbol_orders:
+                        self.logger.info(f"🔍 Encontradas {len(symbol_orders)} ordens abertas para {self.symbol}")
+                        self._clean_old_orders()  # Use the existing method to cancel orders
+                    else:
+                        self.logger.info(f"ℹ️ Nenhuma ordem aberta encontrada para {self.symbol}")
+                else:
+                    self.logger.info("ℹ️ Nenhuma ordem aberta encontrada na conta")
+            except Exception as e:
+                self.logger.error(f"❌ Erro ao cancelar ordens durante o shutdown: {e}")
+                import traceback
+                self.logger.debug(f"Stack trace: {traceback.format_exc()}")
         
-        # Imprimir relatório final
+        # Print final report
         if self.start_time:
             uptime = datetime.now() - self.start_time
             self.logger.info(f"⏱️ Tempo de operação: {uptime}")
         
-        # Status final
-        # if self.position_mgr:
-        #     pos_status = self.position_mgr.get_status_summary()
-        #     self.logger.info(f"💰 Saldo Final: ${pos_status['account_balance']:,.2f}")
-        #     
-        #     for symbol, pos in pos_status['positions'].items():
-        #         pnl = pos.get('realized_pnl', 0)
-        #         self.logger.info(f"📊 {symbol} - PNL Realizado: ${pnl:,.2f}")
+        # Print final balance
+        if self.position_mgr:
+            try:
+                if self.position_mgr.update_account_state():
+                    self.logger.info("=" * 60)
+                    self.logger.info("💰 STATUS FINAL DA CONTA:")
+                    self.logger.info(f"   Saldo Total: ${self.position_mgr.account_balance:,.2f}")
+                    self.logger.info(f"   Margem Usada: ${self.position_mgr.margin_used:,.2f}")
+                    self.logger.info(f"   Margem Disponível: ${self.position_mgr.margin_available:,.2f}")
+                    
+                    if hasattr(self.position_mgr, 'get_open_positions'):
+                        positions = self.position_mgr.get_open_positions()
+                        if positions:
+                            self.logger.info("\n📊 POSIÇÕES ABERTAS:")
+                            for pos in positions:
+                                pnl = pos.get('unrealized_pnl', 0)
+                                self.logger.info(f"   {pos.get('symbol')}: {pos.get('size', 0):.4f} @ ${pos.get('entry_price', 0):.2f} | PnL: ${pnl:,.2f}")
+            except Exception as e:
+                self.logger.error(f"❌ Erro ao obter status final da conta: {e}")
         
         self.logger.info("=" * 80)
         self.logger.info("✅ Bot encerrado com sucesso")
