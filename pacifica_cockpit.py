@@ -249,21 +249,18 @@ class DataCollector:
             }]
 
     def _get_orders(self):
-        """Get real orders data from position manager"""
+        """Get real orders data from position manager and auth client"""
         try:
-            # Import and initialize position manager
+            # Import and initialize clients
             from src.position_manager import PositionManager
             from src.pacifica_auth import PacificaAuth
-            
+
             auth_client = PacificaAuth()
             position_manager = PositionManager(auth_client)
-            
-            # Get status summary which includes open orders
-            status = position_manager.get_status_summary()
-            
-            if status and 'positions' in status:
+
+            # Method 1: Try position manager's open_orders first
+            if hasattr(position_manager, 'open_orders') and position_manager.open_orders:
                 orders = []
-                # Convert open_orders to our format
                 for order_id, order_data in position_manager.open_orders.items():
                     orders.append({
                         'id': order_id,
@@ -274,10 +271,56 @@ class DataCollector:
                         'quantity': order_data.get('quantity', 0),
                         'status': 'PENDING'  # We don't have real status in position manager
                     })
-                return orders
-            
+                if orders:
+                    return orders
+
+            # Method 2: Try auth client's get_open_orders
+            try:
+                api_orders = auth_client.get_open_orders()
+                if api_orders and len(api_orders) > 0:
+                    orders = []
+                    for order in api_orders:
+                        # Convert API order format to our format
+                        orders.append({
+                            'id': str(order.get('order_id', order.get('id', ''))),
+                            'symbol': order.get('symbol', ''),
+                            'side': order.get('side', ''),
+                            'type': order.get('type', 'LIMIT'),
+                            'price': float(order.get('price', 0)),
+                            'quantity': float(order.get('quantity', order.get('amount', 0))),
+                            'status': order.get('status', 'PENDING')
+                        })
+                    return orders
+            except Exception as api_error:
+                self.logger.warning(f"⚠️ API orders error: {api_error}")
+
+            # Method 3: Check account info for orders count and try alternative methods
+            try:
+                account_info = auth_client.get_account_info()
+                if account_info and 'data' in account_info:
+                    data = account_info['data']
+                    if isinstance(data, list) and len(data) > 0:
+                        data = data[0]
+
+                    orders_count = data.get('orders_count', 0)
+                    if orders_count > 0:
+                        self.logger.info(f"💡 Account shows {orders_count} orders, but API methods failed")
+                        # Return a placeholder order to indicate orders exist
+                        return [{
+                            'id': 'API_ERROR',
+                            'symbol': 'MULTIPLE',
+                            'side': 'UNKNOWN',
+                            'type': 'UNKNOWN',
+                            'price': 0,
+                            'quantity': orders_count,
+                            'status': 'API_UNAVAILABLE',
+                            'error': f'Account shows {orders_count} orders but cannot retrieve details'
+                        }]
+            except Exception as account_error:
+                self.logger.warning(f"⚠️ Account info error: {account_error}")
+
             return []
-            
+
         except Exception as e:
             self.logger.error(f"Error getting real orders: {e}")
             # Fallback to mock data
@@ -667,22 +710,69 @@ class PacificaCockpit:
         if orders:
             df = pd.DataFrame(orders)
 
-            # Status badges
-            def color_status(status):
-                colors = {
-                    'PENDING': '🟡',
-                    'FILLED': '🟢',
-                    'CANCELLED': '🔴',
-                    'PARTIAL': '🟠'
-                }
-                return colors.get(status, '⚪')
+            # Handle error cases in orders
+            if 'error' in df.columns:
+                error_rows = df[df['error'].notna()]
+                normal_rows = df[df['error'].isna()]
 
-            df['Status'] = df['status'].apply(lambda x: f"{color_status(x)} {x}")
+                if not error_rows.empty:
+                    st.warning("⚠️ **Orders API Issues Detected:**")
+                    for _, row in error_rows.iterrows():
+                        st.info(f"📋 {row['error']}")
+                        if row.get('quantity', 0) > 0:
+                            st.metric("Orders Count", f"{int(row['quantity'])} orders", help="Orders detected but details unavailable")
 
-            st.dataframe(df[['id', 'symbol', 'side', 'type', 'price', 'quantity', 'Status']],
-                        use_container_width=True)
+                if not normal_rows.empty:
+                    st.subheader("Order Details")
+                    display_df = normal_rows.drop(columns=['error'])
+                    st.dataframe(display_df, use_container_width=True)
+            else:
+                # Normal display
+                st.dataframe(df, use_container_width=True)
+
+            # Show orders count
+            real_orders = [o for o in orders if 'error' not in o]
+            if real_orders:
+                st.success(f"✅ Found {len(real_orders)} order(s)")
+            else:
+                st.warning("⚠️ No orders with valid data found")
+
         else:
-            st.info("No recent orders")
+            st.info("🔄 Loading orders data...")
+
+            # Try to show direct orders data for debugging
+            try:
+                from src.pacifica_auth import PacificaAuth
+
+                auth_client = PacificaAuth()
+
+                # Check account info for orders count
+                account_info = auth_client.get_account_info()
+                if account_info and 'data' in account_info:
+                    data = account_info['data']
+                    if isinstance(data, list) and len(data) > 0:
+                        data = data[0]
+
+                    orders_count = data.get('orders_count', 0)
+                    if orders_count > 0:
+                        st.info(f"💡 Account shows {orders_count} order(s) - check API connectivity")
+                        st.metric("Orders Count", orders_count, help="Orders detected in account but API unavailable")
+                    else:
+                        st.info("💡 No orders found in account")
+
+                # Try to get orders directly
+                try:
+                    api_orders = auth_client.get_open_orders()
+                    if api_orders and len(api_orders) > 0:
+                        st.success(f"✅ Found {len(api_orders)} order(s) via direct API call")
+                        st.json(api_orders[:3])  # Show first 3 orders
+                    else:
+                        st.info("💡 No orders returned from API")
+                except Exception as api_error:
+                    st.error(f"❌ API orders error: {api_error}")
+
+            except Exception as e:
+                st.error(f"❌ Cannot connect to trading API: {e}")
 
     def _render_liquidations_tab(self):
         st.header("⚠️ Liquidation Monitor")
