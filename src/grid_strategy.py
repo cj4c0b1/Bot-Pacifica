@@ -1,5 +1,5 @@
 """
-Grid Strategy - Implementação da estratégia de Grid Trading
+Grid Strategy - Grid Trading Strategy Implementation
 """
 import os
 import time
@@ -13,7 +13,7 @@ import uuid
 
 class GridStrategy:
     def __init__(self, auth_client, calculator, position_manager):
-        # Determinar o tipo específico de grid strategy
+        # Determines the specific grid strategy type
         strategy_type = os.getenv('STRATEGY_TYPE', 'market_making').lower()
         if strategy_type not in ['pure_grid', 'market_making']:
             strategy_type = 'market_making'
@@ -55,7 +55,7 @@ class GridStrategy:
             # Validar parâmetros
             valid, errors = self.calculator.validate_grid_parameters()
             if not valid:
-                self.logger.error(f"❌ Parâmetros inválidos: {errors}")
+                self.logger.error(f"❌ Invalid parameters: {errors}")
                 return False
             
             # VERIFICAR ORDENS EXISTENTES PRIMEIRO
@@ -108,11 +108,11 @@ class GridStrategy:
                 self.grid_center = current_price
                 
                 self.logger.info(f"✅ Grid retomado com {len(existing_orders)} ordens existentes")
-                self.logger.info(f"⏭️ Pulando criação de novas ordens - usando ordens existentes")
+                self.logger.info(f"⏭️ Skipping new order creation - using existing orders")
                 return True  # ✅ Retorna True para continuar o loop
             
             # Se não há ordens, calcular novos níveis
-            self.logger.info(f"📊 Nenhuma ordem existente - criando novo grid...")
+            self.logger.info(f"📊 No existing orders - creating new grid...")
             self.active_grid = self.calculator.calculate_grid_levels(current_price)
 
             # Atualizar tracker com saldo inicial
@@ -130,7 +130,7 @@ class GridStrategy:
             # execute mesmo com grid_active inicialmente False. Definimos o
             # grid_active temporariamente para True para permitir a criação
             # das ordens iniciais; se falhar, reverteremos para False.
-            self.logger.debug("🔧 Temporariamente ativando grid para criação de ordens iniciais")
+            self.logger.debug("🔧 Temporarily activating grid for initial order creation")
             self.grid_active = True
             success = self._place_grid_orders()
 
@@ -141,17 +141,17 @@ class GridStrategy:
             else:
                 # Reverter para estado inativo se falhou
                 self.grid_active = False
-                self.logger.error(f"❌ Falha ao criar ordens do grid")
+                self.logger.error(f"❌ Failed to create grid orders")
                 return False  # ❌ Retorna False para encerrar
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao inicializar grid: {e}")
+            self.logger.error(f"❌ Error initializing grid: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
             return False
     
     def _reconstruct_grid_from_orders(self, existing_orders: List, current_price: float) -> None:
-        """Reconstrói a estrutura do grid baseado em ordens existentes"""
+        """Reconstructs grid structure based on existing orders"""
         
         buy_levels = []
         sell_levels = []
@@ -181,7 +181,7 @@ class GridStrategy:
         self.logger.info(f"📊 Grid reconstruído: {len(buy_levels)} buy levels, {len(sell_levels)} sell levels")
     
     def _place_grid_orders(self) -> bool:
-        """Coloca ordens do grid"""
+        """Places grid orders"""
 
             # 🔍 DEBUG: Verificar estado antes de criar ordens
         self.logger.debug(f"🔍 === _place_grid_orders DEBUG ===")
@@ -255,11 +255,11 @@ class GridStrategy:
             else:
                 self.logger.debug(f"⏭️ Pulando ordem sell em ${price_key} - já existe (ID: {existing_prices.get(key) or self.placed_orders.get(price_key)})")
 
-        self.logger.info(f"📊 {orders_placed} novas ordens colocadas no grid")
+        self.logger.info(f"📊 {orders_placed} new orders placed in grid")
         return orders_placed > 0
 
     def _place_single_order(self, price: float, side: str, quantity: float = None) -> bool:
-        """Coloca uma ordem individual"""
+        """Places a single order"""
         
         if not self.grid_active:
             return False
@@ -312,7 +312,7 @@ class GridStrategy:
                         
                         # Se margem muito baixa, ativar proteções
                         if margin_percent < 20:
-                            self.logger.warning("🔧 Margem crítica - verificando proteções...")
+                            self.logger.warning("🔧 Critical margin - checking protections...")
                             is_safe, msg = self.position_mgr.check_margin_safety()
                         
                         return False
@@ -371,10 +371,10 @@ class GridStrategy:
                 return False
     
     def check_and_rebalance(self, current_price: float) -> None:
-        """Verifica se precisa rebalancear o grid com tratamento robusto de preço"""
+        """Checks if needs to rebalance grid with robust price handling"""
         
         if not self.grid_active:
-            self.logger.warning("⚠️ Grid não está ativo")
+            self.logger.warning("⚠️ Grid is not active")
             return
 
         # 🔧 VERIFICAÇÃO MELHORADA DE PREÇO INVÁLIDO COM RECUPERAÇÃO
@@ -402,7 +402,7 @@ class GridStrategy:
         # Para Pure Grid - verificar se saiu do range
         if self.strategy_type == 'pure_grid' and self.range_exit:
             if not self._check_price_in_range(current_price):
-                self.logger.warning(f"⚠️ Preço fora do range - pausando grid")
+                self.logger.warning(f"⚠️ Price outside range - pausing grid")
                 self.pause_grid()
                 return
         
@@ -416,17 +416,17 @@ class GridStrategy:
                 self.shift_grid(current_price)  # Função para deslocar (próximo passo)
     
     def check_filled_orders(self, current_price: float) -> None:
-        """Verifica ordens executadas e cria ordens opostas COM CORREÇÃO"""
+        """Checks filled orders and creates opposite orders WITH CORRECTION"""
         
         try:
             # 🔧 CORREÇÃO: Buscar TODAS as ordens abertas e filtrar corretamente
             all_open_orders = self.auth.get_open_orders()
             
             if all_open_orders is None:
-                self.logger.warning("⚠️ Não foi possível buscar ordens abertas")
+                self.logger.warning("⚠️ Could not fetch open orders")
                 return
             
-            # FILTRAR APENAS ORDENS PRINCIPAIS (não TP/SL)
+            # FILTER ONLY MAIN ORDERS (not TP/SL)
             open_orders = []
             tp_sl_orders = []
             
@@ -453,7 +453,7 @@ class GridStrategy:
             
             self.logger.debug(f"📋 {self.symbol}: {total_symbol_orders} total | {main_count} principais | {tp_sl_count} TP/SL")
             
-            # 🔧 USAR APENAS ORDENS PRINCIPAIS para detecção de fills
+            # 🔧 USE ONLY MAIN ORDERS for fill detection
             open_order_ids = set()
             for order in open_orders:
                 order_id = order.get('order_id')
@@ -503,15 +503,15 @@ class GridStrategy:
                 self.logger.info(f"📊 Posições: {summary['total_longs']} longs, {summary['total_shorts']} shorts")
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao verificar fills: {e}")
+            self.logger.error(f"❌ Error checking fills: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
 
     def rebalance_grid_orders(self, current_price: float) -> None:
-        """Rebalanceia o grid adicionando ordens faltantes COM CORREÇÃO ROBUSTA"""
+        """Rebalances grid by adding missing orders WITH ROBUST CORRECTION"""
         
         try:
-            # Verificar margem ANTES de tentar rebalancear
+            # Check margin BEFORE attempting to rebalance
             self.position_mgr.update_account_state()
             
             if self.position_mgr.account_balance > 0:
@@ -520,11 +520,11 @@ class GridStrategy:
                 
                 if margin_percent < 25:
                     self.logger.warning(f"⚠️ Margem baixa ({margin_percent:.1f}%) - pulando rebalanceamento")
-                    self.logger.info("💡 Mínimo necessário: 25% de margem livre")
+                    self.logger.info("💡 Minimum required: 25% free margin")
                     
                     # Ativar proteções se muito baixo
                     if margin_percent < 20:
-                        self.logger.warning("🔧 Ativando proteções automáticas...")
+                        self.logger.warning("🔧 Activating automatic protections...")
                         is_safe, msg = self.position_mgr.check_margin_safety()
                     
                     return  # NÃO continua rebalanceamento
@@ -556,7 +556,7 @@ class GridStrategy:
             # 1. Buscar ordens abertas atuais
             all_open_orders = self.auth.get_open_orders()
             if all_open_orders is None:
-                self.logger.warning("⚠️ Não foi possível buscar ordens para rebalanceamento")
+                self.logger.warning("⚠️ Could not fetch orders for rebalancing")
                 return
             
             # FILTRAR APENAS ORDENS PRINCIPAIS
@@ -611,7 +611,7 @@ class GridStrategy:
             
             # 4. Se não precisa criar ordens, sair
             if buy_needed <= 0 and sell_needed <= 0:
-                self.logger.info(f"✅ Grid completo - sem necessidade de rebalanceamento")
+                self.logger.info(f"✅ Grid complete - no need for rebalancing")
                 return
             
             # 5. Criar APENAS as ordens faltantes baseado nos níveis do grid
@@ -700,17 +700,17 @@ class GridStrategy:
             if orders_created > 0:
                 self.logger.info(f"✅ Rebalanceamento concluído: {orders_created} ordens criadas")
             else:
-                self.logger.info(f"✅ Rebalanceamento concluído: nenhuma ordem criada")
+                self.logger.info(f"✅ Rebalancing completed: no orders created")
                 
             self.logger.info(f"📊 Grid final: {final_buy} buy, {final_sell} sell (Total: {final_buy + final_sell})")
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao rebalancear grid: {e}")
+            self.logger.error(f"❌ Error rebalancing grid: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
 
     def _create_opposite_order(self, entry_price: float, entry_side: str, quantity: float) -> None:
-        """Cria ordem oposta para realizar lucro"""
+        """Creates opposite order to realize profit"""
         
         # Calcular preço alvo (próximo nível do grid)
         target_price = self.calculator.calculate_profit_target(entry_price, entry_side)
@@ -749,7 +749,7 @@ class GridStrategy:
             self.logger.error(f"❌ Falha ao criar ordem de lucro em ${target_price}")
 
     def _check_price_in_range(self, price: float) -> bool:
-        """Verifica se preço está dentro do range do Pure Grid"""
+        """Checks if price is within Pure Grid range"""
         
         range_min = float(os.getenv('RANGE_MIN', '0'))
         range_max = float(os.getenv('RANGE_MAX', '0'))
@@ -763,7 +763,7 @@ class GridStrategy:
         return True
     
     def rebalance_grid(self, new_price: float) -> None:
-        """Rebalanceia o grid para novo preço central"""
+        """Rebalances grid to new center price"""
         
         self.logger.info("🔄 Iniciando rebalanceamento do grid")
         
@@ -793,7 +793,7 @@ class GridStrategy:
         self.logger.info(f"✅ Grid rebalanceado para ${new_price}")
     
     def handle_order_fill(self, order_id: str, fill_price: float, fill_quantity: float, side: str) -> None:
-        """Processa execução de ordem"""
+        """Processes order execution"""
         
         self.logger.info(f"🎯 Ordem executada: {order_id} - {side} {fill_quantity} @ ${fill_price}")
         
@@ -815,7 +815,7 @@ class GridStrategy:
         self._place_single_order(target_price, opposite_side)
     
     def cancel_all_orders(self) -> None:
-        """Cancela todas as ordens ativas"""
+        """Cancels all active orders"""
         
         self.logger.info(f"🚫 Cancelando {len(self.placed_orders)} ordens")
         
@@ -847,30 +847,30 @@ class GridStrategy:
         self.placed_orders.clear()
     
     def pause_grid(self) -> None:
-        """Pausa o grid (cancela todas as ordens)"""
+        """Pauses grid (cancels all orders)"""
         
-        self.logger.warning("⏸️ Pausando grid")
+        self.logger.warning("⏸️ Pausing grid")
         self.cancel_all_orders()
         self.grid_active = False
     
     def resume_grid(self, current_price: float) -> None:
-        """Resume o grid"""
+        """Resumes grid"""
         
-        self.logger.info("▶️ Resumindo grid")
+        self.logger.info("▶️ Resuming grid")
         self.initialize_grid(current_price)
     
     def reset_grid_completely(self, current_price: float) -> bool:
-        """✨ NOVA FUNCIONALIDADE: Reseta o grid completamente, apagando todas as ordens e recriando do zero"""
+        """✨ NEW FEATURE: Completely resets grid, deleting all orders and recreating from scratch"""
         
         try:
             self.logger.info(f"🔄🔥 Iniciando reset completo do grid em ${current_price:,.2f}")
             
             # 1. Cancelar TODAS as ordens ativas
-            self.logger.info("🚫 Cancelando todas as ordens ativas...")
+            self.logger.info("🚫 Canceling all active orders...")
             self.cancel_all_orders()
             
             # 2. Aguardar processamento dos cancelamentos com verificação robusta
-            self.logger.info("⏳ Aguardando cancelamentos na exchange...")
+            self.logger.info("⏳ Waiting for cancellations on exchange...")
             timeout = 10.0  # 10 segundos de timeout
             poll_interval = 0.5
             elapsed = 0.0
@@ -878,7 +878,7 @@ class GridStrategy:
             while elapsed < timeout:
                 current_open = self.auth.get_open_orders(self.symbol)
                 if not current_open or len(current_open) == 0:
-                    self.logger.info("✅ Todas as ordens foram canceladas")
+                    self.logger.info("✅ All orders canceled")
                     break
                     
                 remaining = len([o for o in current_open if o.get('symbol') == self.symbol])
@@ -892,10 +892,10 @@ class GridStrategy:
                 if remaining_orders and len(remaining_orders) > 0:
                     self.logger.warning(f"⚠️ Timeout: {len(remaining_orders)} ordens ainda ativas - prosseguindo mesmo assim")
                 else:
-                    self.logger.info("✅ Cancelamentos concluídos após timeout")
+                    self.logger.info("✅ Cancellations completed after timeout")
             
             # 3. Limpar completamente o estado interno
-            self.logger.info("🧹 Limpando estado interno...")
+            self.logger.info("🧹 Clearing internal state...")
             with self._order_lock:
                 self.placed_orders.clear()
             
@@ -907,26 +907,26 @@ class GridStrategy:
             time.sleep(2.0)
             
             # 5. Recriar o grid completamente do zero
-            self.logger.info("🔧 Recriando grid completamente do zero...")
+            self.logger.info("🔧 Recreating grid completely from scratch...")
             success = self.initialize_grid(current_price)
             
             if success:
                 grid_status = self.get_grid_status()
-                self.logger.info(f"✅ Reset completo finalizado com sucesso!")
+                self.logger.info(f"✅ Complete reset finished successfully!")
                 self.logger.info(f"📊 Novo grid: {grid_status['active_orders']} ordens ativas")
                 return True
             else:
-                self.logger.error("❌ Falha ao recriar grid após reset")
+                self.logger.error("❌ Failed to recreate grid after reset")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"❌ Erro durante reset completo do grid: {e}")
+            self.logger.error(f"❌ Error during complete grid reset: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
             return False
     
     def get_grid_status(self) -> Dict:
-        """Retorna status atual do grid"""
+        """Returns current grid status"""
         
         return {
             'active': self.grid_active,
@@ -939,13 +939,13 @@ class GridStrategy:
         }
     
     def _is_closing_trade(self, side: str, symbol: str) -> bool:
-        """Verifica se é um trade de fechamento (simplificado)"""
+        """Checks if it's a closing trade (simplified)"""
         # Por enquanto, considerar que sell após buy é fechamento
         # Em implementação real, verificar posição atual
         return side == 'sell'
 
     def _get_entry_data(self, symbol: str, side: str) -> Optional[Dict]:
-        """Obtém dados de entrada do trade (simplificado)"""
+        """Gets trade entry data (simplified)"""
         # Em implementação real, buscar da base de dados de trades abertos
         # Por enquanto, simular
         return {
@@ -955,7 +955,7 @@ class GridStrategy:
         }
 
     def _calculate_trade_pnl(self, entry_data: Dict, exit_price: float, quantity: float, exit_side: str) -> float:
-        """Calcula PNL do trade"""
+        """Calculates trade PNL"""
         entry_price = entry_data['price']
         
         if exit_side == 'sell':  # Fechando posição long
@@ -964,12 +964,12 @@ class GridStrategy:
             return (entry_price - exit_price) * quantity
 
     def _get_grid_level(self, price: float) -> int:
-        """Determina nível do grid baseado no preço"""
+        """Determines grid level based on price"""
         # Implementação simplificada
         return 1
 
     def get_performance_metrics(self) -> Dict:
-        """Retorna métricas de performance"""
+        """Returns performance metrics"""
         # Para status regular, usar métricas básicas
         metrics = self.performance_tracker.calculate_metrics(include_advanced=False)
         
@@ -980,7 +980,7 @@ class GridStrategy:
         return metrics
 
     def print_performance_summary(self) -> None:
-        """Imprime resumo de performance"""
+        """Prints performance summary"""
         # Para relatório completo, usar métricas avançadas
         summary = self.performance_tracker.get_performance_summary(include_advanced=True)
         
@@ -997,7 +997,7 @@ class GridStrategy:
         self.logger.info(summary + grid_info)
 
     def get_grid_status_detailed(self) -> Dict:
-        """Retorna status detalhado do grid incluindo limitações"""
+        """Returns detailed grid status including limitations"""
         
         try:
             # Status básico
@@ -1023,11 +1023,11 @@ class GridStrategy:
             return status
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao obter status detalhado: {e}")
+            self.logger.error(f"❌ Error getting detailed status: {e}")
             return self.get_grid_status()  # Fallback para status básico
     
     def shift_grid(self, new_center_price: float) -> None:
-        """Desloca o grid para um novo preço central (Market Making)"""
+        """Shifts grid to new center price (Market Making)"""
         
         try:
             self.logger.info(f"🔄 Iniciando deslocamento do grid para ${new_center_price}")
@@ -1055,7 +1055,7 @@ class GridStrategy:
                 
                 time.sleep(0.2)  # Delay entre cancelamentos
             
-            self.logger.info(f"🚫 {cancelled_orders} ordens canceladas")
+            self.logger.info(f"🚫 {cancelled_orders} orders canceled")
             
             # 2. Limpar tracking de ordens
             self.placed_orders.clear()
@@ -1074,15 +1074,15 @@ class GridStrategy:
                 self.logger.info(f"✅ Grid deslocado com sucesso para ${new_center_price}")
                 self.logger.info(f"📊 Novas ordens: {len(self.placed_orders)} total")
             else:
-                self.logger.error(f"❌ Falha ao colocar ordens do novo grid")
+                self.logger.error(f"❌ Failed to place orders for new grid")
                 
         except Exception as e:
-            self.logger.error(f"❌ Erro ao deslocar grid: {e}")
+            self.logger.error(f"❌ Error shifting grid: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
 
     def _price_key(self, price: float) -> float:
-        """Retorna preço normalizado (usado como chave em placed_orders)"""
+        """Returns normalized price (used as key in placed_orders)"""
         try:
             return float(self.calculator.round_price(price))
         except Exception:
@@ -1100,7 +1100,7 @@ class GridStrategy:
                         pass
 
     def _get_current_price_with_retry(self, max_retries: int = 3) -> float:
-        """Obter preço com retry automático para maior robustez"""
+        """Gets price with automatic retry for greater robustness"""
         
         for attempt in range(max_retries):
             try:
