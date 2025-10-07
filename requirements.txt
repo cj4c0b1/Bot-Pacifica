@@ -2,3 +2,7 @@ python-dotenv>=1.0.1
 requests>=2.32.0
 base58>=2.1.1
 solders>=0.20.0
+
+# Database dependencies for the new tech stack
+redis>=5.0.0
+# Note: sqlite3 is built-in with Python, no need to add as dependency
