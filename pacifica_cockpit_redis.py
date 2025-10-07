@@ -1,6 +1,6 @@
 """
-Pacifica Cockpit - Real-time Trading Dashboard
-Advanced dashboard for monitoring grid trading bot with Redis integration
+Pacifica Cockpit - Redis-Powered Real-time Trading Dashboard
+Advanced dashboard for monitoring positions, orders, and liquidation data from Redis
 """
 
 import streamlit as st
@@ -8,22 +8,21 @@ import pandas as pd
 import numpy as np
 import time
 import json
+import logging
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import redis
 import threading
 import queue
+from collections import defaultdict
 
-# Import your existing modules
+# Import Redis client
 try:
     from src.redis_client import RedisClient
-    from src.performance_tracker import PerformanceTracker
-    from src.position_manager import PositionManager
 except ImportError:
-    # Fallback if imports fail
-    st.warning("Some modules not found, using mock data")
+    st.warning("Redis client not found, using direct Redis connection")
 
 # Configuration
 REDIS_HOST = 'localhost'
@@ -84,157 +83,37 @@ def add_custom_css():
         background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
         color: white;
         padding: 10px;
+        border-radius: 5px;
         margin: 5px 0;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# Main dashboard class
-class PacificaCockpit:
+# Redis heartbeat monitor
+class RedisHeartbeat:
     def __init__(self):
-        self.heartbeat = RedisHeartbeat()
-        self.data_collector = DataCollector()
-        self.performance_tracker = None
-    def _get_positions_from_redis(self):
-        """Get positions by aggregating trades from Redis"""
+        self.redis_client = None
+        self.connected = False
+        self.last_ping = None
+
+    def check_connection(self):
         try:
-            from collections import defaultdict
+            if not self.redis_client:
+                self.redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
 
-            # Connect to Redis
-            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
+            # Simple ping to check connection
+            self.redis_client.ping()
+            self.connected = True
+            self.last_ping = datetime.now()
+        except redis.ConnectionError:
+            self.connected = False
 
-            # Get all trade keys
-            trade_keys = r.keys('trade:*')
-
-            # Group trades by symbol and calculate positions
-            positions = defaultdict(lambda: {'quantity': 0, 'avg_price': 0, 'total_cost': 0, 'trades': []})
-
-            for trade_key in trade_keys:
-                trade_data = r.hgetall(trade_key)
-                if trade_data:
-                    trade_dict = {}
-                    for field, value in trade_data.items():
-                        field_str = field.decode('utf-8') if isinstance(field, bytes) else field
-                        value_str = value.decode('utf-8') if isinstance(value, bytes) else str(value)
-                        trade_dict[field_str] = value_str
-
-                    symbol = trade_dict.get('symbol', '')
-                    side = trade_dict.get('side', '')
-                    quantity = float(trade_dict.get('quantity', 0))
-                    price = float(trade_dict.get('price', 0))
-
-                    if symbol and quantity > 0:
-                        if side == 'buy':
-                            # Add to position
-                            current_qty = positions[symbol]['quantity']
-                            current_cost = positions[symbol]['total_cost']
-
-                            new_qty = current_qty + quantity
-                            new_cost = current_cost + (quantity * price)
-
-                            positions[symbol]['quantity'] = new_qty
-                            positions[symbol]['total_cost'] = new_cost
-                            positions[symbol]['avg_price'] = new_cost / new_qty if new_qty > 0 else 0
-                            positions[symbol]['trades'].append(trade_dict)
-
-                        elif side == 'sell':
-                            # Reduce position
-                            current_qty = positions[symbol]['quantity']
-                            if current_qty > 0:
-                                positions[symbol]['quantity'] = max(0, current_qty - quantity)
-                                positions[symbol]['trades'].append(trade_dict)
-
-            # Convert to our expected format
-            active_positions = []
-            for symbol, pos_data in positions.items():
-                if pos_data['quantity'] > 0:
-                    active_positions.append({
-                        'symbol': symbol,
-                        'quantity': pos_data['quantity'],
-                        'entry_price': pos_data['avg_price'],
-                        'current_price': pos_data['avg_price'],  # We'll get real price later
-                        'pnl': 0,  # Will calculate based on current price
-                        'pnl_percent': 0,
-                        'liquidation_price': 0  # Will need to calculate or get from elsewhere
-                    })
-
-            return active_positions
-
-        except Exception as e:
-            self.logger.error(f"Error getting positions from Redis: {e}")
-            return []
-
-    def _get_orders_from_redis(self):
-        """Get orders data from Redis"""
-        try:
-            # Connect to Redis
-            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-
-            # Get all order keys
-            order_keys = r.keys('orders:*')
-
-            orders = []
-            for order_key in order_keys:
-                order_value = r.get(order_key)
-                if order_value:
-                    try:
-                        order_data = json.loads(order_value.decode('utf-8') if isinstance(order_value, bytes) else order_value)
-
-                        # Convert to our expected format
-                        orders.append({
-                            'id': str(order_data.get('id', order_key.decode('utf-8') if isinstance(order_key, bytes) else str(order_key))),
-                            'symbol': order_data.get('symbol', ''),
-                            'side': order_data.get('side', ''),
-                            'type': order_data.get('type', 'LIMIT'),
-                            'price': float(order_data.get('price', 0)),
-                            'quantity': float(order_data.get('quantity', 0)),
-                            'status': 'PENDING'  # We don't have status in Redis orders
-                        })
-                    except Exception as e:
-                        self.logger.warning(f"Error parsing order {order_key}: {e}")
-
-            return orders
-
-        except Exception as e:
-            self.logger.error(f"Error getting orders from Redis: {e}")
-            return []
-
-    def _get_liquidation_data_from_redis(self, positions):
-        """Calculate liquidation data from positions"""
-        liquidations = []
-
-        for pos in positions:
-            symbol = pos['symbol']
-            quantity = pos['quantity']
-            entry_price = pos['entry_price']
-
-            # For now, use a simple liquidation price calculation
-            # In a real implementation, this would come from your risk management
-            liquidation_price = entry_price * 0.9  # 10% below entry as example
-
-            # Calculate risk level
-            price_diff = abs(entry_price - liquidation_price)
-            price_ratio = price_diff / entry_price
-
-            if price_ratio < 0.05:  # Within 5% of liquidation price
-                risk_level = 'HIGH'
-            elif price_ratio < 0.15:  # Within 15% of liquidation price
-                risk_level = 'MEDIUM'
-            else:
-                risk_level = 'LOW'
-
-            liquidations.append({
-                'symbol': symbol,
-                'liquidation_price': liquidation_price,
-                'current_price': entry_price,
-                'risk_level': risk_level,
-                'pnl': pos['pnl'],
-                'quantity': quantity
-            })
-
-        return liquidations
-
-    def run(self):
+    def get_status(self):
+        return {
+            'connected': self.connected,
+            'last_ping': self.last_ping,
+            'status_color': 'status-connected' if self.connected else 'status-disconnected'
+        }
 
 # Data collection threads
 class DataCollector:
@@ -256,23 +135,22 @@ class DataCollector:
     def _collect_data(self):
         while self.running:
             try:
-                # Simulate data collection - replace with actual Redis queries
                 timestamp = datetime.now()
 
-                # Mock positions data
-                positions = self._get_positions()
+                # Get positions from Redis
+                positions = self._get_positions_from_redis()
                 self.positions_data.append({'timestamp': timestamp, 'data': positions})
 
-                # Mock orders data
-                orders = self._get_orders()
+                # Get orders from Redis
+                orders = self._get_orders_from_redis()
                 self.orders_data.append({'timestamp': timestamp, 'data': orders})
 
-                # Mock Redis flow data
+                # Get Redis flow data
                 redis_flow = self._get_redis_flow()
                 self.redis_flow_data.append({'timestamp': timestamp, 'data': redis_flow})
 
-                # Mock liquidation data
-                liquidations = self._get_liquidations()
+                # Get liquidation data
+                liquidations = self._get_liquidations_from_redis(positions)
                 self.liquidation_data.append({'timestamp': timestamp, 'data': liquidations})
 
                 # Keep only last 100 data points
@@ -281,42 +159,23 @@ class DataCollector:
                     if len(data_list) > 100:
                         data_list.pop(0)
 
+                time.sleep(2)  # Update every 2 seconds
 
             except Exception as e:
                 st.error(f"Data collection error: {e}")
                 time.sleep(5)
 
-    def _get_positions(self):
-        """Get positions from Redis"""
-        try:
-            return self._get_positions_from_redis()
-        except Exception as e:
-            st.error(f"Error getting positions from Redis: {e}")
-            return []
-
-    def _get_orders(self):
-        """Get orders from Redis"""
-        try:
-            return self._get_orders_from_redis()
-        except Exception as e:
-            st.error(f"Error getting orders from Redis: {e}")
-            return []
-
-    def _get_liquidations(self):
-        """Get liquidation data from positions"""
-        try:
-            positions = self._get_positions_from_redis()
-            return self._get_liquidation_data_from_redis(positions)
-        except Exception as e:
-            st.error(f"Error getting liquidation data from Redis: {e}")
-            return []
+# Main dashboard class
+class PacificaCockpit:
+    def __init__(self):
+        self.heartbeat = RedisHeartbeat()
+        self.data_collector = DataCollector()
+        self.performance_tracker = None
+        self.logger = logging.getLogger('PacificaCockpit')
 
     def _get_positions_from_redis(self):
         """Get positions by aggregating trades from Redis"""
         try:
-            from collections import defaultdict
-            import redis
-
             # Connect to Redis
             r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
 
@@ -384,9 +243,6 @@ class DataCollector:
     def _get_orders_from_redis(self):
         """Get orders data from Redis"""
         try:
-            import redis
-            import json
-
             # Connect to Redis
             r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
 
@@ -419,35 +275,7 @@ class DataCollector:
             self.logger.error(f"Error getting orders from Redis: {e}")
             return []
 
-    def _get_current_prices_from_redis(self):
-        """Get current prices from Redis (if available)"""
-        try:
-            import redis
-
-            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-
-            # Look for price data in Redis
-            price_keys = r.keys('*price*')
-
-            prices = {}
-            for key in price_keys:
-                key_str = key.decode('utf-8') if isinstance(key, bytes) else key
-                value = r.get(key)
-                if value:
-                    try:
-                        price_data = json.loads(value.decode('utf-8') if isinstance(value, bytes) else value)
-                        if isinstance(price_data, dict) and 'symbol' in price_data and 'price' in price_data:
-                            prices[price_data['symbol']] = float(price_data['price'])
-                    except:
-                        pass
-
-            return prices
-
-        except Exception as e:
-            self.logger.error(f"Error getting prices from Redis: {e}")
-            return {}
-
-    def _get_liquidation_data_from_redis(self, positions):
+    def _get_liquidations_from_redis(self, positions):
         """Calculate liquidation data from positions"""
         liquidations = []
 
@@ -487,14 +315,14 @@ class DataCollector:
         try:
             # Import and initialize Redis client
             from src.redis_client import RedisClient
-            
+
             redis_client = RedisClient()
-            
+
             if redis_client.is_connected():
                 # Get cache info for metrics
                 info = redis_client.get_cache_info()
                 health = redis_client.health_check()
-                
+
                 return {
                     'connected': True,
                     'memory_used': info.get('memory_used', '0B'),
@@ -514,7 +342,7 @@ class DataCollector:
                     'throughput': 0,
                     'queue_length': 0
                 }
-                
+
         except Exception as e:
             self.logger.error(f"Error getting Redis metrics: {e}")
             # Fallback to mock data
@@ -523,186 +351,6 @@ class DataCollector:
                 'latency_ms': np.random.randint(1, 50),
                 'throughput': np.random.randint(100, 1000)
             }
-
-    def _get_liquidations(self):
-        """Get liquidation data from Redis positions"""
-        try:
-            positions = self._get_positions_from_redis()
-            return self._get_liquidation_data_from_redis(positions)
-        except Exception as e:
-            self.logger.error(f"Error getting liquidation data from Redis: {e}")
-            return []
-
-    def _get_positions_from_redis(self):
-        """Get positions by aggregating trades from Redis"""
-        try:
-            from collections import defaultdict
-            import redis
-
-            # Connect to Redis
-            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-
-            # Get all trade keys
-            trade_keys = r.keys('trade:*')
-
-            # Group trades by symbol and calculate positions
-            positions = defaultdict(lambda: {'quantity': 0, 'avg_price': 0, 'total_cost': 0, 'trades': []})
-
-            for trade_key in trade_keys:
-                trade_data = r.hgetall(trade_key)
-                if trade_data:
-                    trade_dict = {}
-                    for field, value in trade_data.items():
-                        field_str = field.decode('utf-8') if isinstance(field, bytes) else field
-                        value_str = value.decode('utf-8') if isinstance(value, bytes) else str(value)
-                        trade_dict[field_str] = value_str
-
-                    symbol = trade_dict.get('symbol', '')
-                    side = trade_dict.get('side', '')
-                    quantity = float(trade_dict.get('quantity', 0))
-                    price = float(trade_dict.get('price', 0))
-
-                    if symbol and quantity > 0:
-                        if side == 'buy':
-                            # Add to position
-                            current_qty = positions[symbol]['quantity']
-                            current_cost = positions[symbol]['total_cost']
-
-                            new_qty = current_qty + quantity
-                            new_cost = current_cost + (quantity * price)
-
-                            positions[symbol]['quantity'] = new_qty
-                            positions[symbol]['total_cost'] = new_cost
-                            positions[symbol]['avg_price'] = new_cost / new_qty if new_qty > 0 else 0
-                            positions[symbol]['trades'].append(trade_dict)
-
-                        elif side == 'sell':
-                            # Reduce position
-                            current_qty = positions[symbol]['quantity']
-                            if current_qty > 0:
-                                positions[symbol]['quantity'] = max(0, current_qty - quantity)
-                                positions[symbol]['trades'].append(trade_dict)
-
-            # Convert to our expected format
-            active_positions = []
-            for symbol, pos_data in positions.items():
-                if pos_data['quantity'] > 0:
-                    active_positions.append({
-                        'symbol': symbol,
-                        'quantity': pos_data['quantity'],
-                        'entry_price': pos_data['avg_price'],
-                        'current_price': pos_data['avg_price'],  # We'll get real price later
-                        'pnl': 0,  # Will calculate based on current price
-                        'pnl_percent': 0,
-                        'liquidation_price': 0  # Will need to calculate or get from elsewhere
-                    })
-
-            return active_positions
-
-        except Exception as e:
-            self.logger.error(f"Error getting positions from Redis: {e}")
-            return []
-
-    def _get_orders_from_redis(self):
-        """Get orders data from Redis"""
-        try:
-            import redis
-            import json
-
-            # Connect to Redis
-            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-
-            # Get all order keys
-            order_keys = r.keys('orders:*')
-
-            orders = []
-            for order_key in order_keys:
-                order_value = r.get(order_key)
-                if order_value:
-                    try:
-                        order_data = json.loads(order_value.decode('utf-8') if isinstance(order_value, bytes) else order_value)
-
-                        # Convert to our expected format
-                        orders.append({
-                            'id': str(order_data.get('id', order_key.decode('utf-8') if isinstance(order_key, bytes) else str(order_key))),
-                            'symbol': order_data.get('symbol', ''),
-                            'side': order_data.get('side', ''),
-                            'type': order_data.get('type', 'LIMIT'),
-                            'price': float(order_data.get('price', 0)),
-                            'quantity': float(order_data.get('quantity', 0)),
-                            'status': 'PENDING'  # We don't have status in Redis orders
-                        })
-                    except Exception as e:
-                        self.logger.warning(f"Error parsing order {order_key}: {e}")
-
-            return orders
-
-        except Exception as e:
-            self.logger.error(f"Error getting orders from Redis: {e}")
-            return []
-
-    def _get_current_prices_from_redis(self):
-        """Get current prices from Redis (if available)"""
-        try:
-            import redis
-
-            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-
-            # Look for price data in Redis
-            price_keys = r.keys('*price*')
-
-            prices = {}
-            for key in price_keys:
-                key_str = key.decode('utf-8') if isinstance(key, bytes) else key
-                value = r.get(key)
-                if value:
-                    try:
-                        price_data = json.loads(value.decode('utf-8') if isinstance(value, bytes) else value)
-                        if isinstance(price_data, dict) and 'symbol' in price_data and 'price' in price_data:
-                            prices[price_data['symbol']] = float(price_data['price'])
-                    except:
-                        pass
-
-            return prices
-
-        except Exception as e:
-            self.logger.error(f"Error getting prices from Redis: {e}")
-            return {}
-
-    def _get_liquidation_data_from_redis(self, positions):
-        """Calculate liquidation data from positions"""
-        liquidations = []
-
-        for pos in positions:
-            symbol = pos['symbol']
-            quantity = pos['quantity']
-            entry_price = pos['entry_price']
-
-            # For now, use a simple liquidation price calculation
-            # In a real implementation, this would come from your risk management
-            liquidation_price = entry_price * 0.9  # 10% below entry as example
-
-            # Calculate risk level
-            price_diff = abs(entry_price - liquidation_price)
-            price_ratio = price_diff / entry_price
-
-            if price_ratio < 0.05:  # Within 5% of liquidation price
-                risk_level = 'HIGH'
-            elif price_ratio < 0.15:  # Within 15% of liquidation price
-                risk_level = 'MEDIUM'
-            else:
-                risk_level = 'LOW'
-
-            liquidations.append({
-                'symbol': symbol,
-                'liquidation_price': liquidation_price,
-                'current_price': entry_price,
-                'risk_level': risk_level,
-                'pnl': pos['pnl'],
-                'quantity': quantity
-            })
-
-        return liquidations
 
     def run(self):
         # Page configuration
@@ -719,7 +367,7 @@ class DataCollector:
         st.markdown("""
         <div class="main-header">
             <div class="cockpit-title">🚀 Pacifica Cockpit</div>
-            <p style="text-align: center; margin: 0;">Real-time Grid Trading Dashboard</p>
+            <p style="text-align: center; margin: 0;">Redis-Powered Real-time Trading Dashboard</p>
         </div>
         """, unsafe_allow_html=True)
 
