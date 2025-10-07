@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import time
 import json
+import logging
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
@@ -136,6 +137,7 @@ class RedisMonitor:
         self.connected = False
         self.last_ping = None
         self.connection_errors = 0
+        self.logger = logging.getLogger('RedisMonitor')
 
     def check_connection(self):
         try:
