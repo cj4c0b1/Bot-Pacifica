@@ -1,6 +1,6 @@
 """
-Performance Tracker - Sistema de Métricas Avançadas para Grid Trading
-Calcula métricas de performance, eficiência do grid e analytics detalhados
+Performance Tracker - Advanced Metrics System for Grid Trading
+Calculates performance metrics, grid efficiency and detailed analytics
 """
 
 import os
@@ -14,10 +14,10 @@ import statistics
 
 @dataclass
 class Trade:
-    """Estrutura para armazenar dados de um trade"""
+    """Structure for storing trade data"""
     id: str
     symbol: str
-    side: str  # 'buy' ou 'sell'
+    side: str  # 'buy' or 'sell'
     entry_price: float
     exit_price: float
     quantity: float
@@ -40,7 +40,7 @@ class Trade:
 
 @dataclass
 class GridExecution:
-    """Dados de execução de ordem do grid"""
+    """Grid order execution data"""
     order_id: str
     symbol: str
     side: str
@@ -70,7 +70,7 @@ class PerformanceTracker:
         self.equity_curve: List[Tuple[datetime, float]] = []
         self.daily_pnl: Dict[str, float] = {}
         
-        # Métricas em tempo real
+        # Real-time metrics
         self.session_start = datetime.now()
         self.initial_balance = 0
         self.current_balance = 0
@@ -80,36 +80,35 @@ class PerformanceTracker:
         self.losing_trades = 0
         
         # Configurações
-        self.risk_free_rate = 0.02  # 2% ao ano
         self.save_interval = 300  # Salvar dados a cada 5 minutos
         
-        # Carregar dados históricos se existirem
+        # Load historical data if available
         self._load_historical_data()
         
-        self.logger.info(f"PerformanceTracker iniciado para {symbol}")
+        self.logger.info(f"PerformanceTracker session started for {symbol}")
     
     def record_trade(self, trade: Trade) -> None:
-        """Registra um trade completo com limitação de memória"""
+        """Records a complete trade with memory limitation"""
         self.trades.append(trade)
         self.total_trades += 1
         
-        # 🔧 NOVA ADIÇÃO: Limitar tamanho da lista de trades para evitar memory leak
+        # 🔧 NEW ADDITION: Limit trade list size to avoid memory leak
         MAX_TRADES_HISTORY = 1000  # Manter apenas 1000 últimos trades
         if len(self.trades) > MAX_TRADES_HISTORY:
             # Remove 50% quando atinge limite (otimização de performance)
             self.trades = self.trades[-500:]
-            self.logger.debug(f"🧹 Lista de trades limitada a 500 entradas para evitar memory leak")
+            self.logger.debug(f"🧹 Trade list limited to 500 entries to avoid memory leak")
         
         if trade.pnl > 0:
             self.winning_trades += 1
         elif trade.pnl < 0:
             self.losing_trades += 1
         
-        # Atualizar PNL diário
+        # Update daily PNL
         date_key = trade.exit_time.strftime('%Y-%m-%d')
         self.daily_pnl[date_key] = self.daily_pnl.get(date_key, 0) + trade.pnl
         
-        # Atualizar curva de equity
+        # Update equity curve
         self.current_balance += trade.pnl
         self.equity_curve.append((trade.exit_time, self.current_balance))
         
@@ -119,7 +118,7 @@ class PerformanceTracker:
             self.equity_curve = self.equity_curve[-500:]
             self.logger.debug(f"🧹 Curva de equity limitada a 500 entradas para evitar memory leak")
         
-        # Atualizar peak para drawdown
+        # Update peak for drawdown
         if self.current_balance > self.peak_balance:
             self.peak_balance = self.current_balance
         
@@ -130,21 +129,21 @@ class PerformanceTracker:
             self._save_data()
     
     def record_grid_execution(self, execution: GridExecution) -> None:
-        """Registra execução de ordem do grid com limitação de memória"""
+        """Records grid order execution with memory limitation"""
         self.grid_executions.append(execution)
         
-        # 🔧 NOVA ADIÇÃO: Limitar tamanho da lista de execuções de grid
+        # 🔧 NEW ADDITION: Limit grid executions list size
         MAX_GRID_EXECUTIONS = 500  # Manter apenas 500 últimas execuções
         if len(self.grid_executions) > MAX_GRID_EXECUTIONS:
             # Remove 50% quando atinge limite (otimização de performance)
             self.grid_executions = self.grid_executions[-250:]
-            self.logger.debug(f"🧹 Lista de grid executions limitada a 250 entradas para evitar memory leak")
+            self.logger.debug(f"🧹 Grid executions list limited to 250 entries to avoid memory leak")
         
         if execution.executed:
             self.logger.debug(f"🎯 Grid executado: {execution.side} @ ${execution.fill_price}")
     
     def update_balance(self, new_balance: float) -> None:
-        """Atualiza saldo atual"""
+        """Updates current balance"""
         if self.initial_balance == 0:
             self.initial_balance = new_balance
             self.peak_balance = new_balance
@@ -157,14 +156,14 @@ class PerformanceTracker:
         # Adicionar à curva de equity
         self.equity_curve.append((datetime.now(), new_balance))
         
-        # 🔧 NOVA ADIÇÃO: Limitar tamanho da curva de equity (caso update_balance seja chamado diretamente)
+        # 🔧 NEW ADDITION: Limit equity curve size (if update_balance is called directly)
         MAX_EQUITY_HISTORY = 1000  # Manter apenas 1000 últimos pontos
         if len(self.equity_curve) > MAX_EQUITY_HISTORY:
             self.equity_curve = self.equity_curve[-500:]
             self.logger.debug(f"🧹 Curva de equity limitada a 500 entradas para evitar memory leak")
     
     def calculate_metrics(self, include_advanced=False):
-        """Calcula todas as métricas de performance"""
+        """Calculates all performance metrics"""
         if not self.trades:
             return self._empty_metrics()
         
@@ -176,38 +175,38 @@ class PerformanceTracker:
             'losing_trades': self.losing_trades,
             'win_rate': self.calculate_win_rate(),
             
-            # Retornos
+            # Returns
             'total_return': self.calculate_total_return(),
             'total_return_percent': self.calculate_total_return_percent(),
             'average_trade_pnl': self.calculate_average_trade_pnl(),
             
-            # Métricas de grid
+            # Grid metrics
             'grid_efficiency': self.calculate_grid_efficiency(),
             'fill_rate': self.calculate_fill_rate(),
             'avg_trade_duration': self.calculate_avg_trade_duration(),
             
-            # Métricas de tempo
+            # Time metrics
             'session_duration': self.get_session_duration(),
             'trades_per_day': self.calculate_trades_per_day(),
         }
         
-        # Métricas avançadas (só quando solicitadas)
+        # Advanced metrics (only when requested)
         if include_advanced:
             advanced_metrics = {
-                # Métricas de risco (computacionalmente pesadas)
+                # Risk metrics (computationally heavy)
                 'sharpe_ratio': self.calculate_sharpe_ratio(),
                 'max_drawdown': self.calculate_max_drawdown(),
                 'max_drawdown_percent': self.calculate_max_drawdown_percent(),
                 'profit_factor': self.calculate_profit_factor(),
                 
-                # Estatísticas avançadas (requerem mais cálculos)
+                # Advanced statistics (require more calculations)
                 'sortino_ratio': self.calculate_sortino_ratio(),
                 'calmar_ratio': self.calculate_calmar_ratio(),
                 'recovery_factor': self.calculate_recovery_factor(),
             }
             metrics.update(advanced_metrics)
         else:
-            # Valores padrão para métricas avançadas quando não calculadas
+            # Default values for advanced metrics when not calculated
             advanced_defaults = {
                 'sharpe_ratio': 0.0,
                 'max_drawdown': 0.0,
@@ -222,29 +221,29 @@ class PerformanceTracker:
         return metrics
     
     def calculate_win_rate(self) -> float:
-        """Taxa de acerto"""
+        """Win rate"""
         if self.total_trades == 0:
             return 0.0
         return (self.winning_trades / self.total_trades) * 100
     
     def calculate_total_return(self) -> float:
-        """Retorno total em USD"""
+        """Total return in USD"""
         return sum(trade.pnl for trade in self.trades)
     
     def calculate_total_return_percent(self) -> float:
-        """Retorno total em %"""
+        """Total return in %"""
         if self.initial_balance == 0:
             return 0.0
         return (self.calculate_total_return() / self.initial_balance) * 100
     
     def calculate_average_trade_pnl(self) -> float:
-        """PNL médio por trade"""
+        """Average trade PNL"""
         if not self.trades:
             return 0.0
         return statistics.mean(trade.pnl for trade in self.trades)
     
     def calculate_sharpe_ratio(self) -> float:
-        """Sharpe Ratio - retorno ajustado pelo risco"""
+        """Sharpe Ratio - risk-adjusted return"""
         if len(self.daily_pnl) < 2:
             return 0.0
         
@@ -266,7 +265,7 @@ class PerformanceTracker:
         return sharpe
     
     def calculate_max_drawdown(self) -> float:
-        """Máximo drawdown em USD"""
+        """Maximum drawdown in USD"""
         if not self.equity_curve:
             return 0.0
         
@@ -284,14 +283,14 @@ class PerformanceTracker:
         return max_dd
     
     def calculate_max_drawdown_percent(self) -> float:
-        """Máximo drawdown em %"""
+        """Maximum drawdown in %"""
         max_dd = self.calculate_max_drawdown()
         if self.peak_balance == 0:
             return 0.0
         return (max_dd / self.peak_balance) * 100
     
     def calculate_profit_factor(self) -> float:
-        """Profit Factor - ganhos totais / perdas totais"""
+        """Profit Factor - total gains / total losses"""
         gross_profit = sum(trade.pnl for trade in self.trades if trade.pnl > 0)
         gross_loss = abs(sum(trade.pnl for trade in self.trades if trade.pnl < 0))
         
@@ -301,7 +300,7 @@ class PerformanceTracker:
         return gross_profit / gross_loss
     
     def calculate_grid_efficiency(self) -> float:
-        """Eficiência do grid - % de ordens que foram executadas"""
+        """Grid efficiency - % of orders that were executed"""
         if not self.grid_executions:
             return 0.0
         
@@ -311,11 +310,11 @@ class PerformanceTracker:
         return (executed_orders / total_orders) * 100
     
     def calculate_fill_rate(self) -> float:
-        """Taxa de preenchimento das ordens"""
+        """Order fill rate"""
         return self.calculate_grid_efficiency()  # Mesmo cálculo
     
     def calculate_avg_trade_duration(self) -> float:
-        """Duração média dos trades em segundos"""
+        """Average trade duration in seconds"""
         if not self.trades:
             return 0.0
         
@@ -323,12 +322,12 @@ class PerformanceTracker:
         return statistics.mean(durations)
     
     def get_session_duration(self) -> float:
-        """Duração da sessão atual em horas"""
+        """Current session duration in hours"""
         duration = datetime.now() - self.session_start
         return duration.total_seconds() / 3600
     
     def calculate_trades_per_day(self) -> float:
-        """Número de trades por dia"""
+        """Number of trades per day"""
         session_hours = self.get_session_duration()
         if session_hours == 0:
             return 0.0
@@ -337,7 +336,7 @@ class PerformanceTracker:
         return trades_per_hour * 24
     
     def calculate_sortino_ratio(self) -> float:
-        """Sortino Ratio - como Sharpe mas só considera volatilidade negativa"""
+        """Sortino Ratio - like Sharpe but only considers negative volatility"""
         if len(self.daily_pnl) < 2:
             return 0.0
         
@@ -356,7 +355,7 @@ class PerformanceTracker:
         return (avg_return - daily_risk_free) / downside_deviation * (365 ** 0.5)
     
     def calculate_calmar_ratio(self) -> float:
-        """Calmar Ratio - retorno anual / max drawdown"""
+        """Calmar Ratio - annual return / max drawdown"""
         annual_return = self.calculate_total_return_percent() * (365 / max(1, self.get_session_duration() * 24))
         max_dd_percent = self.calculate_max_drawdown_percent()
         
@@ -366,7 +365,7 @@ class PerformanceTracker:
         return annual_return / max_dd_percent
     
     def calculate_recovery_factor(self) -> float:
-        """Recovery Factor - lucro líquido / max drawdown"""
+        """Recovery Factor - net profit / max drawdown"""
         net_profit = self.calculate_total_return()
         max_dd = self.calculate_max_drawdown()
         
@@ -376,7 +375,7 @@ class PerformanceTracker:
         return net_profit / max_dd
     
     def get_performance_summary(self, include_advanced=True) -> str:
-        """Retorna resumo formatado da performance"""
+        """Returns formatted performance summary"""
         metrics = self.calculate_metrics(include_advanced=include_advanced)
         
         summary = f"""
@@ -401,7 +400,7 @@ class PerformanceTracker:
         return summary
     
     def _empty_metrics(self) -> Dict:
-        """Retorna métricas vazias quando não há trades"""
+        """Returns empty metrics when no trades"""
         return {key: 0.0 for key in [
             'total_trades', 'winning_trades', 'losing_trades', 'win_rate',
             'total_return', 'total_return_percent', 'average_trade_pnl',
@@ -412,7 +411,7 @@ class PerformanceTracker:
         ]}
     
     def _save_data(self) -> None:
-        """Salva dados de performance em arquivo"""
+        """Saves performance data to file"""
         try:
             data_dir = Path("data")
             data_dir.mkdir(exist_ok=True)
@@ -454,7 +453,7 @@ class PerformanceTracker:
             self.logger.error(f"❌ Erro ao salvar dados: {e}")
     
     def _load_historical_data(self) -> None:
-        """Carrega dados históricos se existirem"""
+        """Loads historical data if available"""
         try:
             data_dir = Path("data")
             if not data_dir.exists():
@@ -472,7 +471,7 @@ class PerformanceTracker:
             with open(latest_file, 'r') as f:
                 data = json.load(f)
             
-            # Reconstruir trades
+            # Reconstruct trades
             for trade_data in data.get('trades', []):
                 trade = Trade(
                     id=trade_data['id'],
@@ -498,12 +497,12 @@ class PerformanceTracker:
             self.winning_trades = sum(1 for t in self.trades if t.pnl > 0)
             self.losing_trades = sum(1 for t in self.trades if t.pnl < 0)
             
-            self.logger.info(f"📂 Dados históricos carregados: {len(self.trades)} trades")
+            self.logger.info(f"📂 Historical data loaded: {len(self.trades)} trades")
             
         except Exception as e:
-            self.logger.warning(f"⚠️ Erro ao carregar dados históricos: {e}")
+            self.logger.warning(f"⚠️ Error loading historical data: {e}")
     
     def export_trades_csv(self, filename: Optional[str] = None) -> str:
-        """Export de CSV desativado pelo usuário — função mantida como no-op para compatibilidade."""
+        """CSV export disabled by user — function kept as no-op for compatibility."""
         self.logger.info("📄 Export de CSV de trades está desativado (removido conforme solicitado).")
         return ""
