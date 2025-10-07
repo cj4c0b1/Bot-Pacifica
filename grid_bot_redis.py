@@ -426,7 +426,7 @@ class RedisGridTradingBot:
             if current_price == 0:
                 self.logger.warning("⚠️ Initial price not obtained - will retry in loop")
             else:
-                self.logger.info(f"💰 Initial price {self.symbol}: ${current_price",.2f"}")
+                self.logger.info(f"💰 Initial price {self.symbol}: ${current_price:.2f}")
 
         # Check balance if configured
         if self.check_balance:
@@ -444,8 +444,8 @@ class RedisGridTradingBot:
 
             self.logger.info("=" * 60)
             self.logger.info("💰 ACCOUNT STATUS:")
-            self.logger.info(f"   Total Balance: ${self.position_mgr.account_balance".2f"}")
-            self.logger.info(f"   Available Margin: ${self.position_mgr.margin_available".2f"}")
+            self.logger.info(f"   Total Balance: ${self.position_mgr.account_balance:.2f}")
+            self.logger.info(f"   Available Margin: ${self.position_mgr.margin_available:.2f}")
             self.logger.info("=" * 60)
         else:
             self.logger.error("❌ Failed to load account information")
@@ -529,7 +529,7 @@ class RedisGridTradingBot:
                 if iteration % 20 == 0:  # More frequent logging for Redis version
                     uptime = datetime.now() - self.bot_start_time
                     if self.strategy_type == 'grid':
-                        self.logger.info(f"💓 Redis Heartbeat #{iteration} - Uptime: {uptime} | Price: ${current_price",.2f"} | Session: {self.session_id}")
+                        self.logger.info(f"💓 Redis Heartbeat #{iteration} - Uptime: {uptime} | Price: ${current_price:.2f} | Session: {self.session_id}")
                     else:
                         active_positions = len(getattr(self.strategy, 'active_positions', []))
                         self.logger.info(f"💓 Redis Heartbeat #{iteration} - Uptime: {uptime} | Positions: {active_positions} | Session: {self.session_id}")
@@ -572,7 +572,7 @@ class RedisGridTradingBot:
 
             uptime = datetime.now() - self.bot_start_time
 
-            self.logger.info("📊 Session Summary:"            self.logger.info(f"   Session ID: {self.session_id}")
+            self.logger.info(f"   Session ID: {self.session_id}")
             self.logger.info(f"   Total Iterations: {final_iteration}")
             self.logger.info(f"   Uptime: {uptime}")
             self.logger.info(f"   Errors: {final_errors}")
@@ -606,6 +606,20 @@ class RedisPositionManager:
         self.auth = auth_client
         self.redis = redis_client
         self.session_id = session_id
+        
+        # Initialize positions dictionary
+        self.positions = {}  # In-memory cache of positions
+        self.open_orders = {}  # Track open orders
+        self._account_balance = 0.0  # Use underscore prefix to avoid property conflict
+        self._margin_available = 0.0  # Use underscore prefix to avoid property conflict
+        self._margin_used = 0.0  # Use underscore prefix to avoid property conflict
+        self.last_position_update = 0
+        self.position_cache_ttl = 5  # Cache positions for 5 seconds
+        self.initialized = False  # Track if initialization is complete
+        
+        # Ensure positions is always a dictionary
+        if not hasattr(self, 'positions') or not isinstance(self.positions, dict):
+            self.positions = {}
 
         # Redis keys for this session
         self.positions_key = f"positions:{session_id}"
@@ -616,6 +630,9 @@ class RedisPositionManager:
         self.max_position_size = float(os.getenv('MAX_POSITION_SIZE_USD', '1000'))
         self.leverage = int(os.getenv('LEVERAGE', '10'))
 
+        # Initialize positions from Redis if available
+        self._load_positions_from_redis()
+        
         self.logger.info(f"🚀 Redis Position Manager initialized for session {session_id}")
 
     def update_account_state(self) -> bool:
@@ -650,7 +667,7 @@ class RedisPositionManager:
             }
 
             if self.redis.set_cache(self.balance_key, balance_data, ttl=60):  # 1 minute TTL for balance
-                self.logger.debug(f"💾 Account state cached in Redis: ${account_balance".2f"}")
+                self.logger.debug(f"💾 Account state cached in Redis: ${account_balance:.2f}")
                 return True
             else:
                 self.logger.error("❌ Failed to cache account state in Redis")
@@ -664,22 +681,33 @@ class RedisPositionManager:
     def account_balance(self) -> float:
         """Get account balance from Redis cache"""
         balance_data = self.redis.get_cache(self.balance_key)
-        return float(balance_data.get('account_balance', 0)) if balance_data else 0.0
+        if balance_data:
+            return float(balance_data.get('account_balance', 0))
+        return self._account_balance
 
     @property
     def margin_available(self) -> float:
         """Get available margin from Redis cache"""
         balance_data = self.redis.get_cache(self.balance_key)
-        return float(balance_data.get('margin_available', 0)) if balance_data else 0.0
+        if balance_data:
+            return float(balance_data.get('margin_available', 0))
+        return self._margin_available
 
     @property
     def margin_used(self) -> float:
         """Get used margin from Redis cache"""
         balance_data = self.redis.get_cache(self.balance_key)
-        return float(balance_data.get('margin_used', 0)) if balance_data else 0.0
+        if balance_data:
+            return float(balance_data.get('margin_used', 0))
+        return self._margin_used
 
-    def can_place_order(self, order_value: float, symbol: str) -> tuple[bool, str]:
-        """Check if order can be placed with Redis-optimized logic"""
+    def can_place_order(self, order_value: float, symbol: str = None) -> tuple[bool, str]:
+        """Check if order can be placed with Redis-optimized logic
+        
+        Args:
+            order_value: Value of the order in USD
+            symbol: Optional symbol for the order (defaults to None)
+        """
         try:
             # Get current balance from Redis
             balance_data = self.redis.get_cache(self.balance_key)
@@ -690,14 +718,14 @@ class RedisPositionManager:
             margin_needed = order_value / self.leverage
 
             if margin_needed > margin_available:
-                return False, f"Insufficient margin: needs ${margin_needed".2f"}, available ${margin_available".2f"}"
+                return False, f"Insufficient margin: needs ${margin_needed:.2f}, available ${margin_available:.2f}"
 
             # Check position limits
             current_exposure = self.get_current_exposure(symbol)
             projected_exposure = current_exposure + order_value
 
             if projected_exposure > self.max_position_size:
-                return False, f"Maximum exposure exceeded: ${projected_exposure".2f"} > ${self.max_position_size".2f"}"
+                return False, f"Maximum exposure exceeded: ${projected_exposure:.2f} > ${self.max_position_size:.2f}"
 
             return True, "OK"
 
@@ -705,23 +733,92 @@ class RedisPositionManager:
             self.logger.error(f"❌ Error checking order placement: {e}")
             return False, f"Error: {str(e)}"
 
+    def _update_positions_cache(self):
+        """Update the positions cache from the API"""
+        try:
+            # Ensure positions is initialized
+            if not hasattr(self, 'positions') or not isinstance(self.positions, dict):
+                self.positions = {}
+                
+            current_time = time.time()
+            if current_time - self.last_position_update < self.position_cache_ttl:
+                return True  # Cache is still fresh
+
+            # Get positions from API
+            positions = self.auth.get_positions()
+            if positions is None:
+                self.logger.warning("⚠️ No positions data received from API")
+                return False
+
+            # Update positions cache
+            new_positions = {}
+            for position in positions:
+                try:
+                    symbol = position.get('symbol')
+                    if symbol:
+                        new_positions[symbol] = position
+                except Exception as e:
+                    self.logger.error(f"❌ Error processing position: {e}")
+                    continue
+
+            # Only update if we have valid positions
+            if new_positions:
+                self.positions = new_positions
+                # Update Redis cache
+                try:
+                    self.redis.set_cache(self.positions_key, self.positions, ttl=60)
+                except Exception as e:
+                    self.logger.error(f"❌ Error updating Redis cache: {e}")
+                    # Continue even if Redis update fails
+                
+                self.last_position_update = current_time
+                self.initialized = True
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error updating positions cache: {e}")
+            # Ensure we have at least an empty dict for positions
+            if not hasattr(self, 'positions') or not isinstance(self.positions, dict):
+                self.positions = {}
+            return False
+
+    def _load_positions_from_redis(self):
+        """Load positions from Redis cache"""
+        try:
+            cached_positions = self.redis.get_cache(self.positions_key)
+            if cached_positions and isinstance(cached_positions, dict):
+                self.positions = cached_positions
+                return True
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not load positions from Redis: {e}")
+        return False
+
     def get_current_exposure(self, symbol: str) -> float:
         """Get current position exposure for symbol"""
         try:
-            # Get positions from API (Redis doesn't store historical positions)
-            positions = self.auth.get_positions()
+            # Ensure positions is initialized
+            if not hasattr(self, 'positions') or not isinstance(self.positions, dict):
+                self.positions = {}
+                
+            # Update positions cache if needed
+            if not self.initialized:
+                self._update_positions_cache()
 
-            if not positions:
+            # Get position for symbol
+            position = self.positions.get(symbol)
+            if not position:
                 return 0.0
 
-            for position in positions:
-                if position.get('symbol') == symbol:
-                    # Calculate current position value
-                    amount = abs(float(position.get('amount', 0)))
-                    current_price = self._get_current_price(symbol)
-                    return amount * current_price
-
-            return 0.0
+            # Calculate current position value
+            try:
+                amount = abs(float(position.get('amount', 0)))
+                current_price = self._get_current_price(symbol)
+                return amount * current_price
+            except (ValueError, TypeError) as e:
+                self.logger.warning(f"⚠️ Invalid position data for {symbol}: {position}")
+                return 0.0
 
         except Exception as e:
             self.logger.error(f"❌ Error getting current exposure: {e}")
@@ -746,10 +843,31 @@ class RedisPositionManager:
                             return price
 
             return 0.0
-
         except Exception as e:
-            self.logger.error(f"❌ Error getting current price: {e}")
+            self.logger.error(f"Error getting current price: {e}")
             return 0.0
+
+    def add_order(self, order_id: str, order_data: dict) -> None:
+        """Add an order to the open orders tracking
+        
+        Args:
+            order_id: The ID of the order
+            order_data: Dictionary containing order details (price, quantity, side, symbol)
+        """
+        try:
+            if not hasattr(self, 'open_orders'):
+                self.open_orders = {}
+                
+            self.open_orders[order_id] = order_data
+            
+            # Also store in Redis for persistence
+            try:
+                self.redis.set_cache(f"{self.orders_key}:{order_id}", order_data, ttl=86400)  # 24h TTL
+            except Exception as e:
+                self.logger.error(f"Error saving order to Redis: {e}")
+                
+        except Exception as e:
+            self.logger.error(f"Error adding order {order_id}: {e}")
 
 # ============================================================================
 # MAIN EXECUTION

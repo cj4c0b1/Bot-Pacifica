@@ -37,8 +37,8 @@ class RedisOptimizer:
                 host=self.host,
                 port=self.port,
                 socket_timeout=5,
-                socket_keepalive=True,
-                socket_keepalive_options=(1, 3, 5)
+                socket_keepalive=True
+                # socket_keepalive_options parameter removed - not needed for basic keepalive
             )
             self.client.ping()
         except Exception as e:
@@ -292,7 +292,7 @@ def main():
     if 'error' not in benchmarks:
         print("✅ Benchmark Results:")
         for operation, time_ms in benchmarks.items():
-            print(f"   {operation}: {time_ms".3f"}ms")
+            print(f"   {operation}: {time_ms:.3f}ms")
     else:
         print(f"❌ Benchmark failed: {benchmarks['error']}")
 
