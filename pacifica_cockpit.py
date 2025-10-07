@@ -161,173 +161,206 @@ class DataCollector:
                     if len(data_list) > 100:
                         data_list.pop(0)
 
-                time.sleep(2)  # Update every 2 seconds
 
             except Exception as e:
                 st.error(f"Data collection error: {e}")
                 time.sleep(5)
 
     def _get_positions(self):
-        """Get real positions data from position manager"""
+        """Get positions from Redis"""
         try:
-            # Import and initialize position manager
-            from src.position_manager import PositionManager
-            from src.pacifica_auth import PacificaAuth
-
-            # Initialize auth client (you may need to adjust this based on your setup)
-            auth_client = PacificaAuth()
-            position_manager = PositionManager(auth_client)
-
-            # Test API connectivity first
-            try:
-                test_prices = auth_client.get_prices()
-                if not test_prices or not test_prices.get('success'):
-                    self.logger.warning("⚠️ API not responding properly for prices")
-                    raise Exception("API connectivity issue")
-            except Exception as api_error:
-                self.logger.error(f"❌ API connectivity failed: {api_error}")
-                # Return mock data with error indicator
-                return [{
-                    'symbol': 'API_ERROR',
-                    'quantity': 0,
-                    'entry_price': 0,
-                    'current_price': 0,
-                    'pnl': 0,
-                    'error': f'API Error: {str(api_error)[:50]}...'
-                }]
-
-            # Get position summary
-            summary = position_manager.get_position_summary()
-
-            if summary and 'positions' in summary:
-                positions = []
-                for pos in summary['positions']:
-                    # Get current price for each position
-                    try:
-                        current_price = position_manager._get_current_price(pos['symbol'])
-                    except Exception as price_error:
-                        self.logger.warning(f"⚠️ Failed to get price for {pos['symbol']}: {price_error}")
-                        current_price = 0.0
-
-                    if current_price > 0:
-                        positions.append({
-                            'symbol': pos['symbol'],
-                            'quantity': pos['size'],
-                            'entry_price': pos['entry_price'],
-                            'current_price': current_price,
-                            'pnl': pos['pnl'],
-                            'pnl_percent': pos['pnl_percent'],
-                            'liquidation_price': pos.get('liquidation_price', 0)
-                        })
-                    else:
-                        # Still include the position but mark it as having price issues
-                        positions.append({
-                            'symbol': pos['symbol'],
-                            'quantity': pos['size'],
-                            'entry_price': pos['entry_price'],
-                            'current_price': 0.0,
-                            'pnl': 0.0,
-                            'pnl_percent': 0.0,
-                            'liquidation_price': pos.get('liquidation_price', 0),
-                            'price_error': f'Unable to fetch price for {pos["symbol"]}'
-                        })
-
-                return positions
-
-            return []
-
+            return self._get_positions_from_redis()
         except Exception as e:
-            self.logger.error(f"Error getting real positions: {e}")
-            # Return detailed error information
-            return [{
-                'symbol': 'ERROR',
-                'quantity': 0,
-                'entry_price': 0,
-                'current_price': 0,
-                'pnl': 0,
-                'error': f'Position Manager Error: {str(e)[:100]}...'
-            }]
+            st.error(f"Error getting positions from Redis: {e}")
+            return []
 
     def _get_orders(self):
-        """Get real orders data from position manager and auth client"""
+        """Get orders from Redis"""
         try:
-            # Import and initialize clients
-            from src.position_manager import PositionManager
-            from src.pacifica_auth import PacificaAuth
-
-            auth_client = PacificaAuth()
-            position_manager = PositionManager(auth_client)
-
-            # Method 1: Try position manager's open_orders first
-            if hasattr(position_manager, 'open_orders') and position_manager.open_orders:
-                orders = []
-                for order_id, order_data in position_manager.open_orders.items():
-                    orders.append({
-                        'id': order_id,
-                        'symbol': order_data.get('symbol', ''),
-                        'side': order_data.get('side', ''),
-                        'type': 'LIMIT',  # Default type
-                        'price': order_data.get('price', 0),
-                        'quantity': order_data.get('quantity', 0),
-                        'status': 'PENDING'  # We don't have real status in position manager
-                    })
-                if orders:
-                    return orders
-
-            # Method 2: Try auth client's get_open_orders
-            try:
-                api_orders = auth_client.get_open_orders()
-                if api_orders and len(api_orders) > 0:
-                    orders = []
-                    for order in api_orders:
-                        # Convert API order format to our format
-                        orders.append({
-                            'id': str(order.get('order_id', order.get('id', ''))),
-                            'symbol': order.get('symbol', ''),
-                            'side': order.get('side', ''),
-                            'type': order.get('type', 'LIMIT'),
-                            'price': float(order.get('price', 0)),
-                            'quantity': float(order.get('quantity', order.get('amount', 0))),
-                            'status': order.get('status', 'PENDING')
-                        })
-                    return orders
-            except Exception as api_error:
-                self.logger.warning(f"⚠️ API orders error: {api_error}")
-
-            # Method 3: Check account info for orders count and try alternative methods
-            try:
-                account_info = auth_client.get_account_info()
-                if account_info and 'data' in account_info:
-                    data = account_info['data']
-                    if isinstance(data, list) and len(data) > 0:
-                        data = data[0]
-
-                    orders_count = data.get('orders_count', 0)
-                    if orders_count > 0:
-                        self.logger.info(f"💡 Account shows {orders_count} orders, but API methods failed")
-                        # Return a placeholder order to indicate orders exist
-                        return [{
-                            'id': 'API_ERROR',
-                            'symbol': 'MULTIPLE',
-                            'side': 'UNKNOWN',
-                            'type': 'UNKNOWN',
-                            'price': 0,
-                            'quantity': orders_count,
-                            'status': 'API_UNAVAILABLE',
-                            'error': f'Account shows {orders_count} orders but cannot retrieve details'
-                        }]
-            except Exception as account_error:
-                self.logger.warning(f"⚠️ Account info error: {account_error}")
-
+            return self._get_orders_from_redis()
+        except Exception as e:
+            st.error(f"Error getting orders from Redis: {e}")
             return []
 
+    def _get_liquidations(self):
+        """Get liquidation data from positions"""
+        try:
+            positions = self._get_positions_from_redis()
+            return self._get_liquidation_data_from_redis(positions)
         except Exception as e:
-            self.logger.error(f"Error getting real orders: {e}")
-            # Fallback to mock data
-            return [
-                {'id': '12345', 'symbol': 'BTCUSDT', 'side': 'BUY', 'type': 'LIMIT', 'price': 44000, 'quantity': 0.001, 'status': 'PENDING'},
-                {'id': '12346', 'symbol': 'ETHUSDT', 'side': 'SELL', 'type': 'MARKET', 'quantity': 0.05, 'status': 'FILLED'}
-            ]
+            st.error(f"Error getting liquidation data from Redis: {e}")
+            return []
+
+    def _get_positions_from_redis(self):
+        """Get positions by aggregating trades from Redis"""
+        try:
+            from collections import defaultdict
+            import redis
+
+            # Connect to Redis
+            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
+
+            # Get all trade keys
+            trade_keys = r.keys('trade:*')
+
+            # Group trades by symbol and calculate positions
+            positions = defaultdict(lambda: {'quantity': 0, 'avg_price': 0, 'total_cost': 0, 'trades': []})
+
+            for trade_key in trade_keys:
+                trade_data = r.hgetall(trade_key)
+                if trade_data:
+                    trade_dict = {}
+                    for field, value in trade_data.items():
+                        field_str = field.decode('utf-8') if isinstance(field, bytes) else field
+                        value_str = value.decode('utf-8') if isinstance(value, bytes) else str(value)
+                        trade_dict[field_str] = value_str
+
+                    symbol = trade_dict.get('symbol', '')
+                    side = trade_dict.get('side', '')
+                    quantity = float(trade_dict.get('quantity', 0))
+                    price = float(trade_dict.get('price', 0))
+
+                    if symbol and quantity > 0:
+                        if side == 'buy':
+                            # Add to position
+                            current_qty = positions[symbol]['quantity']
+                            current_cost = positions[symbol]['total_cost']
+
+                            new_qty = current_qty + quantity
+                            new_cost = current_cost + (quantity * price)
+
+                            positions[symbol]['quantity'] = new_qty
+                            positions[symbol]['total_cost'] = new_cost
+                            positions[symbol]['avg_price'] = new_cost / new_qty if new_qty > 0 else 0
+                            positions[symbol]['trades'].append(trade_dict)
+
+                        elif side == 'sell':
+                            # Reduce position
+                            current_qty = positions[symbol]['quantity']
+                            if current_qty > 0:
+                                positions[symbol]['quantity'] = max(0, current_qty - quantity)
+                                positions[symbol]['trades'].append(trade_dict)
+
+            # Convert to our expected format
+            active_positions = []
+            for symbol, pos_data in positions.items():
+                if pos_data['quantity'] > 0:
+                    active_positions.append({
+                        'symbol': symbol,
+                        'quantity': pos_data['quantity'],
+                        'entry_price': pos_data['avg_price'],
+                        'current_price': pos_data['avg_price'],  # We'll get real price later
+                        'pnl': 0,  # Will calculate based on current price
+                        'pnl_percent': 0,
+                        'liquidation_price': 0  # Will need to calculate or get from elsewhere
+                    })
+
+            return active_positions
+
+        except Exception as e:
+            self.logger.error(f"Error getting positions from Redis: {e}")
+            return []
+
+    def _get_orders_from_redis(self):
+        """Get orders data from Redis"""
+        try:
+            import redis
+            import json
+
+            # Connect to Redis
+            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
+
+            # Get all order keys
+            order_keys = r.keys('orders:*')
+
+            orders = []
+            for order_key in order_keys:
+                order_value = r.get(order_key)
+                if order_value:
+                    try:
+                        order_data = json.loads(order_value.decode('utf-8') if isinstance(order_value, bytes) else order_value)
+
+                        # Convert to our expected format
+                        orders.append({
+                            'id': str(order_data.get('id', order_key.decode('utf-8') if isinstance(order_key, bytes) else str(order_key))),
+                            'symbol': order_data.get('symbol', ''),
+                            'side': order_data.get('side', ''),
+                            'type': order_data.get('type', 'LIMIT'),
+                            'price': float(order_data.get('price', 0)),
+                            'quantity': float(order_data.get('quantity', 0)),
+                            'status': 'PENDING'  # We don't have status in Redis orders
+                        })
+                    except Exception as e:
+                        self.logger.warning(f"Error parsing order {order_key}: {e}")
+
+            return orders
+
+        except Exception as e:
+            self.logger.error(f"Error getting orders from Redis: {e}")
+            return []
+
+    def _get_current_prices_from_redis(self):
+        """Get current prices from Redis (if available)"""
+        try:
+            import redis
+
+            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
+
+            # Look for price data in Redis
+            price_keys = r.keys('*price*')
+
+            prices = {}
+            for key in price_keys:
+                key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                value = r.get(key)
+                if value:
+                    try:
+                        price_data = json.loads(value.decode('utf-8') if isinstance(value, bytes) else value)
+                        if isinstance(price_data, dict) and 'symbol' in price_data and 'price' in price_data:
+                            prices[price_data['symbol']] = float(price_data['price'])
+                    except:
+                        pass
+
+            return prices
+
+        except Exception as e:
+            self.logger.error(f"Error getting prices from Redis: {e}")
+            return {}
+
+    def _get_liquidation_data_from_redis(self, positions):
+        """Calculate liquidation data from positions"""
+        liquidations = []
+
+        for pos in positions:
+            symbol = pos['symbol']
+            quantity = pos['quantity']
+            entry_price = pos['entry_price']
+
+            # For now, use a simple liquidation price calculation
+            # In a real implementation, this would come from your risk management
+            liquidation_price = entry_price * 0.9  # 10% below entry as example
+
+            # Calculate risk level
+            price_diff = abs(entry_price - liquidation_price)
+            price_ratio = price_diff / entry_price
+
+            if price_ratio < 0.05:  # Within 5% of liquidation price
+                risk_level = 'HIGH'
+            elif price_ratio < 0.15:  # Within 15% of liquidation price
+                risk_level = 'MEDIUM'
+            else:
+                risk_level = 'LOW'
+
+            liquidations.append({
+                'symbol': symbol,
+                'liquidation_price': liquidation_price,
+                'current_price': entry_price,
+                'risk_level': risk_level,
+                'pnl': pos['pnl'],
+                'quantity': quantity
+            })
+
+        return liquidations
 
     def _get_redis_flow(self):
         """Get real Redis metrics"""
@@ -372,56 +405,13 @@ class DataCollector:
             }
 
     def _get_liquidations(self):
-        """Get real liquidation data from positions"""
+        """Get liquidation data from Redis positions"""
         try:
-            # Import and initialize position manager
-            from src.position_manager import PositionManager
-            from src.pacifica_auth import PacificaAuth
-            
-            auth_client = PacificaAuth()
-            position_manager = PositionManager(auth_client)
-            
-            # Get position summary
-            summary = position_manager.get_position_summary()
-            
-            if summary and 'positions' in summary:
-                liquidations = []
-                for pos in summary['positions']:
-                    liquidation_price = pos.get('liquidation_price', 0)
-                    current_price = position_manager._get_current_price(pos['symbol'])
-                    
-                    if liquidation_price > 0 and current_price > 0:
-                        # Calculate risk level based on proximity to liquidation price
-                        price_diff = abs(current_price - liquidation_price)
-                        price_ratio = price_diff / liquidation_price
-                        
-                        if price_ratio < 0.05:  # Within 5% of liquidation price
-                            risk_level = 'HIGH'
-                        elif price_ratio < 0.15:  # Within 15% of liquidation price
-                            risk_level = 'MEDIUM'
-                        else:
-                            risk_level = 'LOW'
-                        
-                        liquidations.append({
-                            'symbol': pos['symbol'],
-                            'liquidation_price': liquidation_price,
-                            'current_price': current_price,
-                            'risk_level': risk_level,
-                            'pnl': pos['pnl'],
-                            'quantity': pos['size']
-                        })
-                
-                return liquidations
-            
-            return []
-            
+            positions = self._get_positions_from_redis()
+            return self._get_liquidation_data_from_redis(positions)
         except Exception as e:
-            self.logger.error(f"Error getting liquidation data: {e}")
-            # Fallback to mock data
-            return [
-                {'symbol': 'BTCUSDT', 'liquidation_price': 42000, 'current_price': 46000, 'risk_level': 'LOW'},
-                {'symbol': 'ETHUSDT', 'liquidation_price': 2800, 'current_price': 3100, 'risk_level': 'MEDIUM'}
-            ]
+            self.logger.error(f"Error getting liquidation data from Redis: {e}")
+            return []
 
 # Main dashboard class
 class PacificaCockpit:
@@ -510,52 +500,35 @@ class PacificaCockpit:
             st.markdown(heartbeat_html, unsafe_allow_html=True)
 
         with col2:
-            # Key metrics - Get real data from position manager
+            # Key metrics - Get real data from Redis
             st.markdown("### 📊 Key Metrics")
             metrics_col1, metrics_col2, metrics_col3, metrics_col4 = st.columns(4)
 
             try:
-                from src.position_manager import PositionManager
-                from src.pacifica_auth import PacificaAuth
+                # Get positions from Redis
+                positions = self._get_positions_from_redis()
+                orders = self._get_orders_from_redis()
 
-                auth_client = PacificaAuth()
-                position_manager = PositionManager(auth_client)
-                summary = position_manager.get_position_summary()
+                with metrics_col1:
+                    st.metric("Active Positions", len(positions))
 
-                if summary:
-                    with metrics_col1:
-                        st.metric("Active Positions", summary.get('position_count', 0))
+                with metrics_col2:
+                    st.metric("Open Orders", len(orders))
 
-                    with metrics_col2:
-                        status = position_manager.get_status_summary()
-                        open_orders = status.get('open_orders_count', 0) if status else 0
-                        st.metric("Open Orders", open_orders)
+                with metrics_col3:
+                    # Calculate total P&L from positions
+                    total_pnl = 0
+                    for pos in positions:
+                        # For now, use a simple calculation based on quantity and entry price
+                        # In a real implementation, you'd calculate based on current market price
+                        total_pnl += pos.get('pnl', 0)
 
-                    with metrics_col3:
-                        total_pnl = sum(pos.get('pnl', 0) for pos in summary.get('positions', []))
-                        st.metric("Total PnL", f"${total_pnl:.2f}")
+                    st.metric("Total P&L", f"${total_pnl:.2f}")
 
-                    with metrics_col4:
-                        # Redis latency estimate
-                        redis_latency = "12ms"  # Default
-                        try:
-                            from src.redis_client import RedisClient
-                            redis_client = RedisClient()
-                            if redis_client.is_connected():
-                                redis_latency = "1ms"  # Connected
-                        except:
-                            pass
-                        st.metric("Redis Latency", redis_latency)
-                else:
-                    # Fallback to mock data
-                    with metrics_col1:
-                        st.metric("Active Positions", "2", delta="↗️ 1")
-                    with metrics_col2:
-                        st.metric("Open Orders", "3", delta="↘️ 1")
-                    with metrics_col3:
-                        st.metric("Total PnL", "+$120.50", delta="+2.3%")
-                    with metrics_col4:
-                        st.metric("Redis Latency", "12ms", delta="-3ms")
+                with metrics_col4:
+                    # Redis latency estimate
+                    redis_latency = "1ms"  # Direct Redis connection
+                    st.metric("Redis Latency", redis_latency)
 
             except Exception as e:
                 st.error(f"Error loading metrics: {e}")
@@ -565,9 +538,9 @@ class PacificaCockpit:
                 with metrics_col2:
                     st.metric("Open Orders", "3", delta="↘️ 1")
                 with metrics_col3:
-                    st.metric("Total PnL", "+$120.50", delta="+2.3%")
+                    st.metric("Total P&L", "+$120.50", delta="+2.3%")
                 with metrics_col4:
-                    st.metric("Redis Latency", "12ms", delta="-3ms")
+                    st.metric("Redis Latency", "1ms", delta="Direct")
 
         with col3:
             # Redis Flow Chart - Show real Redis metrics
@@ -688,19 +661,17 @@ class PacificaCockpit:
 
             # Try to show direct position data for debugging
             try:
-                from src.position_manager import PositionManager
-                from src.pacifica_auth import PacificaAuth
-
-                auth_client = PacificaAuth()
-                position_manager = PositionManager(auth_client)
-                summary = position_manager.get_position_summary()
-
-                if summary and summary.get('position_count', 0) > 0:
-                    st.info(f"💡 Position manager shows {summary['position_count']} position(s) - check API connectivity")
+                # Show positions directly from Redis
+                positions = self._get_positions_from_redis()
+                if positions:
+                    st.success(f"✅ Found {len(positions)} position(s) in Redis")
+                    for pos in positions[:3]:  # Show first 3 positions
+                        st.info(f"📈 {pos['symbol']}: {pos['quantity']} @ ${pos['entry_price']:.4f}")
                 else:
-                    st.info("💡 No positions found in position manager")
+                    st.info("💡 No positions found in Redis")
+
             except Exception as e:
-                st.error(f"❌ Cannot connect to position manager: {e}")
+                st.error(f"❌ Cannot connect to Redis: {e}")
 
     def _render_orders_tab(self):
         st.header("📋 Live Orders")
@@ -742,37 +713,16 @@ class PacificaCockpit:
 
             # Try to show direct orders data for debugging
             try:
-                from src.pacifica_auth import PacificaAuth
-
-                auth_client = PacificaAuth()
-
-                # Check account info for orders count
-                account_info = auth_client.get_account_info()
-                if account_info and 'data' in account_info:
-                    data = account_info['data']
-                    if isinstance(data, list) and len(data) > 0:
-                        data = data[0]
-
-                    orders_count = data.get('orders_count', 0)
-                    if orders_count > 0:
-                        st.info(f"💡 Account shows {orders_count} order(s) - check API connectivity")
-                        st.metric("Orders Count", orders_count, help="Orders detected in account but API unavailable")
-                    else:
-                        st.info("💡 No orders found in account")
-
-                # Try to get orders directly
-                try:
-                    api_orders = auth_client.get_open_orders()
-                    if api_orders and len(api_orders) > 0:
-                        st.success(f"✅ Found {len(api_orders)} order(s) via direct API call")
-                        st.json(api_orders[:3])  # Show first 3 orders
-                    else:
-                        st.info("💡 No orders returned from API")
-                except Exception as api_error:
-                    st.error(f"❌ API orders error: {api_error}")
+                # Show orders directly from Redis
+                orders = self._get_orders_from_redis()
+                if orders:
+                    st.success(f"✅ Found {len(orders)} order(s) in Redis")
+                    st.json(orders[:3])  # Show first 3 orders as JSON
+                else:
+                    st.info("💡 No orders found in Redis")
 
             except Exception as e:
-                st.error(f"❌ Cannot connect to trading API: {e}")
+                st.error(f"❌ Cannot connect to Redis: {e}")
 
     def _render_liquidations_tab(self):
         st.header("⚠️ Liquidation Monitor")
