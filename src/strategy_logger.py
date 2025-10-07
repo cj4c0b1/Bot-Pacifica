@@ -1,6 +1,6 @@
 """
-Strategy Logger - Sistema de Logs Específicos por Estratégia
-Filtra e personaliza logs baseado no tipo de estratégia ativa
+Strategy Logger - Strategy-Specific Logging System
+Filters and customizes logs based on active strategy type
 """
 
 import logging
@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 
 
 class StrategyLogger:
-    """Logger que adapta mensagens baseado na estratégia ativa"""
+    """Logger that adapts messages based on active strategy"""
     
     def __init__(self, base_logger: logging.Logger, strategy_type: str):
         self.base_logger = base_logger
@@ -19,9 +19,9 @@ class StrategyLogger:
         self.setup_filters()
     
     def setup_filters(self):
-        """Configurar filtros específicos por estratégia"""
+        """Sets up strategy-specific filters"""
         
-        # Palavras/frases que devem ser filtradas para multi_asset e multi_asset_enhanced
+        # Words/phrases that should be filtered for multi_asset and multi_asset_enhanced
         self.multi_asset_filters = [
             'grid', 'Grid', 'GRID',
             'níveis', 'níveis', 'levels',
@@ -40,7 +40,7 @@ class StrategyLogger:
             'rebalancing': 'market analysis'
         }
         
-        # Substituições específicas para multi_asset_enhanced
+        # Specific replacements for multi_asset_enhanced
         self.enhanced_replacements = {
             'Grid': 'Enhanced Multi-Asset',
             'grid': 'algoritmo inteligente',
@@ -50,21 +50,21 @@ class StrategyLogger:
             'rebalancing': 'advanced technical analysis'
         }
         
-        # Palavras que devem ser filtradas para grid strategies
+        # Words that should be filtered for grid strategies
         self.grid_filters = [
             'multi-asset', 'Multi-Asset', 'MULTI-ASSET',
             'scalping', 'Scalping', 'SCALPING'
         ]
         
     def _should_filter_message(self, message: str) -> bool:
-        """Determinar se uma mensagem deve ser filtrada"""
+        """Determines if a message should be filtered"""
         
-        # Mensagens críticas sempre passam
+        # Critical messages always pass
         critical_keywords = ['erro', 'error', 'falhou', 'failed', 'crítico', 'critical']
         if any(word in message.lower() for word in critical_keywords):
             return True
             
-        # Mensagens de inicialização sempre passam
+        # Initialization messages always pass
         init_keywords = ['inicializando', 'initializing', 'carregados', 'loaded', 'pronto', 'ready']
         if any(word in message.lower() for word in init_keywords):
             return True
@@ -84,7 +84,7 @@ class StrategyLogger:
         return True  # Não filtrar
         
     def _adapt_message(self, message: str) -> str:
-        """Adaptar mensagem para a estratégia ativa"""
+        """Adapts message for active strategy"""
         
         adapted_message = message
         
@@ -100,7 +100,7 @@ class StrategyLogger:
         return adapted_message
     
     def _get_strategy_prefix(self) -> str:
-        """Obter prefixo específico da estratégia"""
+        """Gets strategy-specific prefix"""
         
         prefixes = {
             'multi_asset': '🌐',
@@ -112,7 +112,7 @@ class StrategyLogger:
         return prefixes.get(self.strategy_type, '🤖')
     
     def info(self, message: str, force: bool = False):
-        """Log INFO com filtragem por estratégia"""
+        """Log INFO with strategy filtering"""
         
         if not force and not self._should_filter_message(message):
             return
@@ -121,7 +121,7 @@ class StrategyLogger:
         self.base_logger.info(adapted_message)
     
     def debug(self, message: str, force: bool = False):
-        """Log DEBUG com filtragem por estratégia"""
+        """Log DEBUG with strategy filtering"""
         
         if not force and not self._should_filter_message(message):
             return
@@ -130,18 +130,18 @@ class StrategyLogger:
         self.base_logger.debug(adapted_message)
     
     def warning(self, message: str, force: bool = False):
-        """Log WARNING - sempre mostrar avisos importantes"""
+        """Log WARNING - always show important warnings"""
         
         adapted_message = self._adapt_message(message)
         self.base_logger.warning(adapted_message)
     
     def error(self, message: str, force: bool = False):
-        """Log ERROR - sempre mostrar erros"""
+        """Log ERROR - always show errors"""
         
         adapted_message = self._adapt_message(message)
         self.base_logger.error(adapted_message)
     
-    # Métodos específicos para Enhanced Strategy
+    # Enhanced Strategy specific methods
     def enhanced_signal(self, symbol: str, score: int, confidence: float, action: str):
         """Log específico para sinais Enhanced"""
         if self.strategy_type == 'multi_asset_enhanced':
@@ -158,33 +158,33 @@ class StrategyLogger:
             self.base_logger.debug(message)
     
     def strategy_info(self, message: str):
-        """Info específico da estratégia com emoji correto"""
+        """Strategy-specific info with correct emoji"""
         prefix = self._get_strategy_prefix()
         adapted_message = self._adapt_message(f"{prefix} {message}")
         self.base_logger.info(adapted_message)
     
     def strategy_info(self, message: str):
-        """Log específico da estratégia com prefixo"""
+        """Strategy-specific log with prefix"""
         
         prefix = self._get_strategy_prefix()
         adapted_message = f"{prefix} {self._adapt_message(message)}"
         self.base_logger.info(adapted_message)
     
-    # Métodos de passthrough para compatibilidade
+    # Passthrough methods for compatibility
     def __getattr__(self, name):
         """Repassar outros métodos para o logger base"""
         return getattr(self.base_logger, name)
 
 
 def create_strategy_logger(name: str, strategy_type: str) -> StrategyLogger:
-    """Factory function para criar logger específico da estratégia"""
+    """Factory function to create strategy-specific logger"""
     
     base_logger = logging.getLogger(name)
     return StrategyLogger(base_logger, strategy_type)
 
 
 def get_strategy_specific_messages(strategy_type: str) -> Dict[str, str]:
-    """Obter mensagens específicas por estratégia"""
+    """Gets strategy-specific messages"""
     
     messages = {
         'multi_asset': {
