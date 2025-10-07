@@ -201,10 +201,10 @@ class PositionManager:
 
     def get_position_summary(self, symbol: Optional[str] = None) -> Dict:
         """
-        Retorna resumo detalhado das posições
+        Returns detailed position summary
         
         Returns:
-            Dict com informações de exposição e posições
+            Dict with exposure and position information
         """
         try:
             positions = self.auth.get_positions()
@@ -266,7 +266,7 @@ class PositionManager:
             }
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao obter resumo de posições: {e}")
+            self.logger.error(f"❌ Error getting position summary: {e}")
             return {
                 'total_exposure': 0.0,
                 'position_count': 0,
@@ -277,19 +277,19 @@ class PositionManager:
         
     def log_exposure_status(self):
         """
-        Log detalhado do status de exposição atual
+        Detailed log of current exposure status
         """
         try:
             summary = self.get_position_summary()
             
             self.logger.info("=" * 60)
-            self.logger.info("📊 STATUS DE EXPOSIÇÃO")
+            self.logger.info("📊 EXPOSURE STATUS")
             self.logger.info("=" * 60)
-            self.logger.info(f"💰 Exposição Total: ${summary['total_exposure']:.2f}")
-            self.logger.info(f"🎯 Limite Máximo: ${summary['max_position_size']:.2f}")
-            self.logger.info(f"📈 Utilização: {summary['utilization_percent']:.1f}%")
-            self.logger.info(f"✅ Capacidade Disponível: ${summary['available_capacity']:.2f}")
-            self.logger.info(f"📦 Posições Abertas: {summary['position_count']}")
+            self.logger.info(f"💰 Total Exposure: ${summary['total_exposure']:.2f}")
+            self.logger.info(f"🎯 Maximum Limit: ${summary['max_position_size']:.2f}")
+            self.logger.info(f"📈 Utilization: {summary['utilization_percent']:.1f}%")
+            self.logger.info(f"✅ Available Capacity: ${summary['available_capacity']:.2f}")
+            self.logger.info(f"📦 Open Positions: {summary['position_count']}")
             
             if summary['positions']:
                 self.logger.info("-" * 60)
@@ -305,22 +305,22 @@ class PositionManager:
             self.logger.info("=" * 60)
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao logar status de exposição: {e}")
+            self.logger.error(f"❌ Error logging exposure status: {e}")
     
     def _load_positions_from_api(self):
-        """Carrega posições diretamente da API usando mesma lógica de get_current_exposure"""
+        """Loads positions directly from API using same logic as get_current_exposure"""
         try:
-            self.logger.info(f"📍 Carregando detalhes das posições...")
+            self.logger.info(f"📍 Loading position details...")
             
             # Buscar posições pela API (mesmo método que funciona)
             positions_response = self.auth.get_positions()
             
             if not positions_response:
-                self.logger.warning("Sem dados de posições")
+                self.logger.warning("No position data")
                 self.positions.clear()
                 return
             
-            # Limpar posições antigas
+            # Clear old positions
             self.positions.clear()
             
             # Processar cada posição
@@ -401,7 +401,7 @@ class PositionManager:
                 self.logger.error(f"❌ Unknown format: {type(raw_data)}")
                 return False
             
-            # Extrair valores
+            # Extract values
             self.account_balance = float(data.get('balance', 0))
             account_equity = float(data.get('account_equity', 0))
             self.margin_available = float(data.get('available_to_spend', 0))
@@ -415,12 +415,12 @@ class PositionManager:
             self.logger.info("💰 Account status:")
             self.logger.info(f"   Balance: ${self.account_balance:.2f}")
             self.logger.info(f"   Equity: ${account_equity:.2f}")
-            self.logger.info(f"   Margem Used: ${self.margin_used:.2f}")
-            self.logger.info(f"   Margem Available: ${self.margin_available:.2f}")
+            self.logger.info(f"   Margin Used: ${self.margin_used:.2f}")
+            self.logger.info(f"   Margin Available: ${self.margin_available:.2f}")
             
             if self.account_balance > 0:
                 margin_percent = (self.margin_available / self.account_balance) * 100
-                self.logger.info(f"   Margem Free: {margin_percent:.1f}%")
+                self.logger.info(f"   Margin Free: {margin_percent:.1f}%")
             
             self.logger.info(f"   Positions: {positions_count}")
             self.logger.info(f"   Orders: {orders_count}")
@@ -557,7 +557,7 @@ class PositionManager:
     def can_place_order(self, order_value: float, symbol: Optional[str] = None) -> Tuple[bool, str]:
         """Checks if a new order can be placed WITH CORRECTION"""
         
-        #  Sincronizar com API antes da verificação
+        #  Synchronize with API before verification
         if hasattr(self, '_last_sync_time'):
             time_since_sync = time.time() - self._last_sync_time
             if time_since_sync > 30:  # Re-sincronizar a cada 30 segundos
@@ -603,12 +603,12 @@ class PositionManager:
         return True, "OK"
 
     def add_order(self, order_id: str, order_data: Dict) -> None:
-        """Adiciona ordem ao tracking COM VERIFICAÇÃO"""
+        """Adds order to tracking WITH VERIFICATION"""
         
-        # 🔧 CORREÇÃO: Verificar se não é ordem TP/SL
+        # 🔧 CORRECTION: Check if not TP/SL order
         order_type = order_data.get('type', '')
         if order_type in ['TAKE_PROFIT', 'STOP_LOSS']:
-            self.logger.debug(f"🎯 Ordem TP/SL {order_id} não contada para limite")
+            self.logger.debug(f"🎯 TP/SL order {order_id} not counted for limit")
             return  # Não adicionar ao tracking de ordens principais
         
         self.open_orders[order_id] = {
@@ -618,43 +618,43 @@ class PositionManager:
             'value': order_data['price'] * order_data['quantity']
         }
         
-        self.logger.info(f"📝 Ordem principal adicionada: {order_id} - {order_data['side']} {order_data['quantity']} @ ${order_data['price']}")
+        self.logger.info(f"📝 Main order added: {order_id} - {order_data['side']} {order_data['quantity']} @ ${order_data['price']}")
         
-        # Atualizar margem
+        # Update margin
         self.margin_used += self.open_orders[order_id]['margin']
         self.margin_available = self.account_balance - self.margin_used
         
         # Log do status atual
-        self.logger.info(f"📊 Ordens principais ativas: {len(self.open_orders)}/{self.max_open_orders}")
+        self.logger.info(f"📊 Active main orders: {len(self.open_orders)}/{self.max_open_orders}")
 
-    """ Funcao usada para ordens scalping - estrategia diferente 
+    """ Function used for scalping orders - different strategy 
    
     def can_open_new_positions(self) -> Tuple[bool, str]:
-        #Verifica se é seguro abrir novas posições (sem parar o bot)
+        #Checks if it's safe to open new positions (without stopping the bot)
         
-        # Margem baixa para novas posições (< 15%)
+        # Low margin for new positions (< 15%)
         if self.account_balance > 0:
             margin_percent = (self.margin_available / self.account_balance) * 100
             if margin_percent < 15:
-                return False, f"⚠️ ⚠️ Margem baixa: {margin_percent:.1f}% < 15.0%"
+                return False, f"⚠️ ⚠️ Low margin: {margin_percent:.1f}% < 15.0%"
         
         # Saldo zero ou negativo
         if self.account_balance <= 0:
             return False, "⛔ SALDO ZERADO"
         
-        # Perda total > 30% (menor que o critério de parada)
+        # Total loss > 30% (less than stop criterion)
         total_pnl = sum(p.get('realized_pnl', 0) for p in self.positions.values())
         if total_pnl < -(self.account_balance * 0.3):
-            return False, f"⚠️ PERDA ALTA: ${total_pnl:.2f}"
+            return False, f"⚠️ HIGH LOSS: ${total_pnl:.2f}"
         
         return True, "OK""
 
         """
 
     def get_status_summary(self) -> Dict:
-        """Retorna resumo do status atual COM CORREÇÃO"""
+        """Returns current status summary WITH CORRECTION"""
         
-        # 🔧 CORREÇÃO: Mostrar contagem correta
+        # 🔧 CORRECTION: Show correct count
         main_orders_count = len(self.open_orders)  # Só ordens principais
         
         return {
@@ -662,18 +662,18 @@ class PositionManager:
             'margin_used': self.margin_used,
             'margin_available': self.margin_available,
             'margin_percent': (self.margin_available / self.account_balance * 100) if self.account_balance > 0 else 0,
-            'open_orders_count': main_orders_count,  # 🔧 CORRIGIDO
+            'open_orders_count': main_orders_count,  # 🔧 CORRECTED
             'max_orders': self.max_open_orders,
             'positions': self.positions,
             'total_exposure': sum(o.get('value', 0) for o in self.open_orders.values())
         }
     
     def get_current_balance(self) -> float:
-        """Retorna saldo atual da conta"""
+        """Returns current account balance"""
         return self.account_balance
 
     def get_balance_change_percent(self, initial_balance: float) -> float:
-        """Calcula mudança percentual do saldo"""
+        """Calculates percentage change in balance"""
         if initial_balance == 0:
             return 0.0
         
@@ -681,7 +681,7 @@ class PositionManager:
     
     def check_margin_safety(self) -> Tuple[bool, str]:
         """
-        Verifica margem e aplica proteções em CASCATA:
+        Checks margin and applies protections in CASCADE:
         1. Margem < 20% → Cancela ordens (menos drástico)
         2. Margem < 10% → Vende posição (emergência)
         """
@@ -694,33 +694,33 @@ class PositionManager:
         
         # ========== NÍVEL 2: EMERGÊNCIA (Reduzir Posição) ==========
         if margin_percent < self.reduce_position_threshold:
-            warning = f"🚨 MARGEM CRÍTICA: {margin_percent:.1f}% < {self.reduce_position_threshold}%"
+            warning = f"🚨 CRITICAL MARGIN: {margin_percent:.1f}% < {self.reduce_position_threshold}%"
             self.logger.error(warning)
             
             if self.auto_reduce_position:
-                self.logger.warning("🔴 EMERGÊNCIA: Reduzindo posição!")
+                self.logger.warning("🔴 EMERGENCY: Reducing position!")
                 freed = self._reduce_position_on_low_margin()
                 
                 if freed > 0:
-                    self.logger.info(f"✅ Posição reduzida - ${freed:.2f} liberado")
+                    self.logger.info(f"✅ Position reduced - ${freed:.2f} liberado")
                 else:
-                    self.logger.warning("⚠️ Não foi possível reduzir posição")
+                    self.logger.warning("⚠️ Could not reduce position")
             
             return False, warning
         
         # ========== NÍVEL 1: ALERTA (Cancelar Ordens) ==========
         elif margin_percent < self.cancel_orders_threshold:
-            warning = f"⚠️ Margem baixa: {margin_percent:.1f}% < {self.cancel_orders_threshold}%"
+            warning = f"⚠️ Low margin: {margin_percent:.1f}% < {self.cancel_orders_threshold}%"
             self.logger.warning(warning)
             
             if self.auto_cancel_orders:
-                self.logger.info("🔧 Cancelando ordens para liberar margem")
+                self.logger.info("🔧 Canceling orders to free margin")
                 cancelled = self._cancel_orders_on_low_margin()
                 
                 if cancelled > 0:
                     self.logger.info(f"✅ {cancelled} ordens canceladas")
                 else:
-                    self.logger.warning("⚠️ Nenhuma ordem para cancelar")
+                    self.logger.warning("⚠️ No orders to cancel")
             
             return False, warning
         
@@ -728,15 +728,15 @@ class PositionManager:
         return True, f"Margem OK: {margin_percent:.1f}%"
     
     # ========================================================================
-    # SISTEMA 1: CANCELAMENTO DE ORDENS (RENOMEADO)
+    # SYSTEM 1: ORDER CANCELLATION (RENAMED)
     # ========================================================================
     
     def _cancel_orders_on_low_margin(self) -> int:
         """
-        🔧 RENOMEADA de _reduce_exposure()
+        🔧 RENAMED from _reduce_exposure()
         
-        Cancela X% das ordens mais distantes para liberar margem.
-        NÃO vende posições abertas.
+        Cancels X% of the most distant orders para liberar margem.
+        DOES NOT sell open positions.
         
         Returns:
             Número de ordens canceladas
@@ -752,33 +752,33 @@ class PositionManager:
             self.logger.warning("⚠️ Não foi possível obter preço atual")
             return 0
         
-        # Ordenar ordens por distância do preço atual
+        # Sort orders by distance from current price
         orders_with_distance = []
         for order_id, order_data in self.open_orders.items():
             price = order_data['price']
             distance = abs(price - current_price) / current_price
             orders_with_distance.append((distance, order_id, order_data))
         
-        # Ordenar: mais distantes primeiro
+        # Sort: most distant first
         orders_with_distance.sort(reverse=True)
         
-        # Calcular quantas cancelar (baseado em percentual)
+        # Calculate how many to cancel (based on percentage)
         cancel_count = max(1, int(len(self.open_orders) * self.cancel_orders_percentage / 100))
         cancelled_count = 0
         
-        self.logger.warning(f"🔪 Cancelando {cancel_count} ordens mais distantes ({self.cancel_orders_percentage}%)")
+        self.logger.warning(f"🔪 Canceling {cancel_count} most distant orders ({self.cancel_orders_percentage}%)")
         
         for i in range(min(cancel_count, len(orders_with_distance))):
             distance, order_id, order_data = orders_with_distance[i]
             
             try:
-                # ✅ CANCELAR NA API REAL
+                # ✅ CANCEL ON REAL API
                 result = self.auth.cancel_order(str(order_id), symbol)
                 
                 if result:
                     self.remove_order(order_id)
                     cancelled_count += 1
-                    self.logger.info(f"🗑️ Cancelada: {order_data['side']} @ ${order_data['price']:.2f} (distância: {distance*100:.1f}%)")
+                    self.logger.info(f"🗑️ Canceled: {order_data['side']} @ ${order_data['price']:.2f} (distance: {distance*100:.1f}%)")
                     
             except Exception as e:
                 self.logger.error(f"❌ Erro ao cancelar ordem {order_id}: {e}")
@@ -786,31 +786,31 @@ class PositionManager:
         return cancelled_count
     
     # ========================================================================
-    # SISTEMA 2: REDUÇÃO DE POSIÇÃO (NOVO!)
+    # SYSTEM 2: POSITION REDUCTION (NEW!)
     # ========================================================================
     
     def _reduce_position_on_low_margin(self) -> float:
         """
-        🆕 NOVA FUNÇÃO
+        🆕 NEW FUNCTION
         
-        Vende X% da posição aberta para liberar margem em EMERGÊNCIA.
-        Usa o mesmo motor de _force_partial_sell() do AUTO_CLOSE.
+        Sells X% of open position to free margin in EMERGENCY.
+        Uses the same engine as _force_partial_sell() from AUTO_CLOSE.
         
         Returns:
-            Valor em USD liberado
+            USD value freed
         """
         
         try:
             symbol = os.getenv('SYMBOL', 'SOL')
             
-            # Buscar posição real da API
+            # Get real position from API
             api_positions = self.auth.get_positions()
             
             if not api_positions:
-                self.logger.warning("⚠️ Nenhuma posição encontrada na API")
+                self.logger.warning("⚠️ No position found in API")
                 return 0.0
             
-            # Encontrar posição do símbolo
+            # Find position for symbol
             target_position = None
             for pos in api_positions:
                 if pos.get('symbol') == symbol:
@@ -818,50 +818,50 @@ class PositionManager:
                     break
             
             if not target_position:
-                self.logger.warning(f"⚠️ Nenhuma posição {symbol} encontrada")
+                self.logger.warning(f"⚠️ No {symbol} position found")
                 return 0.0
             
-            # Pegar quantidade e lado da posição
+            # Get quantity and position side
             api_quantity = abs(float(target_position.get('amount', 0)))
             position_side = target_position.get('side', '').lower()
             
             if api_quantity < 0.001:
-                self.logger.warning("⚠️ Posição muito pequena para reduzir")
+                self.logger.warning("⚠️ Position too small to reduce")
                 return 0.0
             
-            # Calcular quantidade a vender
+            # Calculate quantity to sell
             qty_to_sell = api_quantity * (self.reduce_position_percentage / 100)
             
-            # Determinar lado da ordem (oposto da posição)
+            # Determine order side (opposite of position)
             order_side = 'bid' if position_side == 'ask' else 'ask'
             
-            # Obter preço atual
+            # Get current price
             current_price = self._get_current_price(symbol)
             if current_price <= 0:
-                self.logger.warning(f"⚠️ Preço inválido para {symbol}")
+                self.logger.warning(f"⚠️ Invalid price for {symbol}")
                 return 0.0
             
-            # Calcular valor a liberar
+            # Calculate value to free
             freed_value = qty_to_sell * current_price
             
-            # Preparar ordem de venda
+            # Prepare sell order
             market_price = current_price * 0.999  # -0.1% para execução rápida
             
-            # Arredondar preço e quantidade
+            # Round price and quantity
             tick_size = self.auth._get_tick_size(symbol)
             market_price = self.auth._round_to_tick_size(market_price, tick_size)
 
-            # 🔧 USAR LOT_SIZE DINÂMICO BASEADO NO SÍMBOLO
+            # 🔧 USE DYNAMIC LOT_SIZE BASED ON SYMBOL
             lot_size = self.auth._get_lot_size(symbol)
             qty_to_sell = self.auth._round_to_lot_size(qty_to_sell, lot_size)
             
             self.logger.warning(f"🔧 Quantidade ajustada para lot_size {lot_size}: {qty_to_sell} {symbol}")
             qty_to_sell = round(qty_to_sell, 2)
             
-            self.logger.warning(f"🚨 VENDENDO {self.reduce_position_percentage}% da posição: {qty_to_sell:.6f} {symbol}")
-            self.logger.warning(f"🚨 Preço: ${market_price:.2f} - Valor a liberar: ${freed_value:.2f}")
+            self.logger.warning(f"🚨 SELLING {self.reduce_position_percentage}% of position: {qty_to_sell:.6f} {symbol}")
+            self.logger.warning(f"🚨 Price: ${market_price:.2f} - Value to free: ${freed_value:.2f}")
             
-            # ✅ EXECUTAR VENDA REAL
+            # ✅ EXECUTE REAL SALE
             result = self.auth.create_order(
                 symbol=symbol,
                 side=order_side,
@@ -873,35 +873,35 @@ class PositionManager:
             
             if result and result.get('success'):
                 order_id = result.get('order_id', 'N/A')
-                self.logger.warning(f"✅ Ordem de emergência criada: {order_id}")
-                self.logger.warning(f"✅ Reduzindo {self.reduce_position_percentage}% da posição por MARGEM CRÍTICA")
+                self.logger.warning(f"✅ Emergency order created: {order_id}")
+                self.logger.warning(f"✅ Reducing {self.reduce_position_percentage}% of position due to CRITICAL MARGIN")
                 return freed_value
             else:
                 error_msg = result.get('error', 'Erro desconhecido') if result else 'Resposta nula'
-                self.logger.error(f"❌ Falha na ordem de emergência: {error_msg}")
+                self.logger.error(f"❌ Emergency order failed: {error_msg}")
                 return 0.0
                 
         except Exception as e:
-            self.logger.error(f"❌ Erro na redução de emergência: {e}")
+            self.logger.error(f"❌ Emergency reduction error: {e}")
             return 0.0
     
     def remove_order(self, order_id: str) -> Optional[Dict]:
-        """Remove ordem do tracking (executada ou cancelada)"""
+        """Remove order from tracking (executed or canceled)"""
         
         if order_id in self.open_orders:
             order = self.open_orders.pop(order_id)
             
-            # Liberar margem
+            # Free margin
             self.margin_used -= order['margin']
             self.margin_available = self.account_balance - self.margin_used
             
-            self.logger.info(f"✅ Ordem removida: {order_id}")
+            self.logger.info(f"✅ Order removed: {order_id}")
             return order
         
         return None
     
     def update_position(self, symbol: str, side: str, quantity: float, price: float) -> None:
-        """Atualiza posição após execução de ordem"""
+        """Update position after order execution"""
         
         if symbol not in self.positions:
             self.positions[symbol] = {
@@ -914,35 +914,35 @@ class PositionManager:
         pos = self.positions[symbol]
 
         # 🔧 MODIFIED: Log antes da atualização
-        self.logger.debug(f"📊 Atualizando posição {symbol}:")
-        self.logger.debug(f"   Antes: qty={pos['quantity']}, avg_price={pos['avg_price']}")
-        self.logger.debug(f"   Operação: {side} {quantity} @ ${price}")
+        self.logger.debug(f"📊 Updating position {symbol}:")
+        self.logger.debug(f"   Before: qty={pos['quantity']}, avg_price={pos['avg_price']}")
+        self.logger.debug(f"   Operation: {side} {quantity} @ ${price}")
         # 🔧 END MODIFIED
         
         if side == 'buy':
-            # Adicionar à posição long
+            # Add to long position
             total_value = (pos['quantity'] * pos['avg_price']) + (quantity * price)
             pos['quantity'] += quantity
             pos['avg_price'] = total_value / pos['quantity'] if pos['quantity'] > 0 else 0
         else:  # sell
-            # Reduzir posição ou adicionar short
+            # Reduce position or add short
             if pos['quantity'] > 0:
-                # Fechando long - calcular lucro realizado
+                # Closing long - calculate realized profit
                 pnl = (price - pos['avg_price']) * min(quantity, pos['quantity'])
                 pos['realized_pnl'] += pnl
-                self.logger.info(f"💰 Lucro realizado: ${pnl:.2f}")
+                self.logger.info(f"💰 Realized profit: ${pnl:.2f}")
             
             pos['quantity'] -= quantity
         
         # 🔧 MODIFIED: Log depois da atualização
-        self.logger.debug(f"   Depois: qty={pos['quantity']}, avg_price={pos['avg_price']}")
-        self.logger.info(f"📊 Posição {symbol}: {pos['quantity']:.6f} @ ${pos['avg_price']:.2f}")
+        self.logger.debug(f"   After: qty={pos['quantity']}, avg_price={pos['avg_price']}")
+        self.logger.info(f"📊 Position {symbol}: {pos['quantity']:.6f} @ ${pos['avg_price']:.2f}")
         # 🔧 END MODIFIED
         
-        self.logger.info(f"📊 Posição {symbol}: {pos['quantity']:.4f} @ ${pos['avg_price']:.2f}")
+        self.logger.info(f"📊 Position {symbol}: {pos['quantity']:.4f} @ ${pos['avg_price']:.2f}")
 
     def get_active_positions_summary(self) -> Dict:
-        """Retorna resumo simplificado das posições ativas"""
+        """Returns simplified summary of active positions"""
         
         longs = []
         shorts = []
@@ -951,7 +951,7 @@ class PositionManager:
         for symbol, pos_data in self.positions.items():
             qty = pos_data.get('quantity', 0)
             
-            if qty > 0.00001:  # Tolerância para arredondamento
+            if qty > 0.00001:  # Tolerance for rounding
                 longs.append({
                     'symbol': symbol,
                     'quantity': qty,
@@ -979,7 +979,7 @@ class PositionManager:
         }
     
     def calculate_unrealized_pnl(self, symbol: str, current_price: float) -> float:
-        """Calcula PNL não realizado"""
+        """Calculate unrealized PnL"""
         
         if symbol not in self.positions:
             return 0
@@ -995,27 +995,27 @@ class PositionManager:
         return pnl
     
     def _reduce_exposure(self) -> None:
-        """Reduz exposição cancelando ordens menos importantes"""
+        """Reduce exposure by canceling less important orders"""
         
         if not self.open_orders:
             return
         
-        # Ordenar ordens por distância do preço atual (cancelar as mais distantes)
-        # Isso é um placeholder - implementar lógica real baseada na estratégia
+        # Sort orders by distance from current price (cancel the most distant)
+        # This is a placeholder - implement real logic based on strategy
         
         orders_to_cancel = []
         
-        # Pegar 30% das ordens mais distantes
+        # Get 30% of most distant orders
         cancel_count = max(1, len(self.open_orders) // 3)
         
         for order_id in list(self.open_orders.keys())[:cancel_count]:
             orders_to_cancel.append(order_id)
         
-        self.logger.warning(f"🔪 Reduzindo exposição: cancelando {len(orders_to_cancel)} ordens")
+        self.logger.warning(f"🔪 Reducing exposure: canceling {len(orders_to_cancel)} orders")
         
         for order_id in orders_to_cancel:
             self.remove_order(order_id)
-            # Aqui você chamaria a API para cancelar de fato
+            # Here you would call the API to actually cancel
             # self.auth.cancel_order(order_id)
 
     # New function for trade statistics
@@ -1051,18 +1051,18 @@ class PositionManager:
     
     def apply_loss_management(self, symbol: str = None) -> Dict:
         """
-        🔴 FUNÇÃO PÚBLICA: Aplica gestão de loss cancelando ordens de compra
+        🔴 PUBLIC FUNCTION: Applies loss management by canceling buy orders
         
-        Use esta função quando:
-        - Posição está em loss significativo
-        - Não quer acumular mais do ativo
-        - Quer manter apenas ordens de venda para reduzir exposição
+        Use this function when:
+        - Position is in significant loss
+        - Don't want to accumulate more of the asset
+        - Want to keep only sell orders to reduce exposure
         
         Args:
-            symbol: Símbolo a aplicar (padrão: SOL)
+            symbol: Symbol to apply (default: SOL)
             
         Returns:
-            Dict com resultado da operação
+            Dict with operation result
         """
         
         try:
@@ -1075,10 +1075,10 @@ class PositionManager:
             sell_orders_before = len([o for o in self.open_orders.values() 
                                     if o['side'] in ['sell', 'ask'] and o['symbol'] == symbol])
             
-            self.logger.info(f"🔴 INICIANDO LOSS MANAGEMENT para {symbol}")
-            self.logger.info(f"📊 Estado atual: {buy_orders_before} compras, {sell_orders_before} vendas")
+            self.logger.info(f"🔴 STARTING LOSS MANAGEMENT for {symbol}")
+            self.logger.info(f"📊 Current state: {buy_orders_before} buys, {sell_orders_before} sells")
             
-            # Aplicar cancelamento de compras
+            # Applying buy order cancellation
             cancelled_count = self.cancel_buy_orders_only(symbol)
             
             # Obter informações depois
@@ -1093,15 +1093,15 @@ class PositionManager:
                 'cancelled_buy_orders': cancelled_count,
                 'remaining_buy_orders': buy_orders_after,
                 'remaining_sell_orders': sell_orders_after,
-                'message': f"Canceladas {cancelled_count} ordens de compra. Mantidas {sell_orders_after} ordens de venda."
+                'message': f"Canceled {cancelled_count} buy orders. Kept {sell_orders_after} sell orders."
             }
             
-            self.logger.info(f"✅ LOSS MANAGEMENT concluído: {result['message']}")
+            self.logger.info(f"✅ LOSS MANAGEMENT completed: {result['message']}")
             
             return result
             
         except Exception as e:
-            error_msg = f"Erro no loss management: {e}"
+            error_msg = f"Error in loss management: {e}"
             self.logger.error(f"❌ {error_msg}")
             return {
                 'success': False,
@@ -1111,13 +1111,13 @@ class PositionManager:
             }
     
     def should_stop_trading(self) -> Tuple[bool, str]:
-        """Verifica se deve parar de operar (condições de emergência)"""
+        """Checks if should stop trading (emergency conditions)"""
         
         # Margem crítica (< 10%)
         if self.account_balance > 0:
             margin_percent = (self.margin_available / self.account_balance) * 100
             if margin_percent < 10:
-                return True, f"⛔ MARGEM CRÍTICA: {margin_percent:.1f}%"
+                return True, f"⛔ CRITICAL MARGIN: {margin_percent:.1f}%"
         
         # Saldo zero ou negativo
         if self.account_balance <= 0:
@@ -1126,134 +1126,134 @@ class PositionManager:
         # Perda total > 50%
         total_pnl = sum(p.get('realized_pnl', 0) for p in self.positions.values())
         if total_pnl < -(self.account_balance * 0.5):
-            return True, f"⛔ PERDA EXCESSIVA: ${total_pnl:.2f}"
+            return True, f"⛔ EXCESSIVE LOSS: ${total_pnl:.2f}"
         
         return False, "OK"
     
     def _check_position_size_and_auto_close(self):
         """
-        ✅ CORRIGIDO: Verifica se a posição atual excede o limite usando valor REAL da API
+        ✅ CORRECTED: Checks if current position exceeds limit using REAL API value
         """
         
         if not self.auto_close_on_limit:
-            return  # Auto-close desabilitado
+            return  # Auto-close disabled
         
         try:
-            # ✅ CORREÇÃO PRINCIPAL: Usar valor real da posição da API
+            # ✅ MAIN CORRECTION: Use real position value from API
             symbol = os.getenv('SYMBOL', 'SOL')
             current_exposure = self.get_current_exposure(symbol)
             
             # Log comparativo (debug)
             old_calculation = self.margin_used * self.leverage
             self.logger.debug(f"📊 Comparação de cálculos:")
-            self.logger.debug(f"   Método ANTIGO (margin×leverage): ${old_calculation:.2f}")
-            self.logger.debug(f"   Método NOVO (posição real): ${current_exposure:.2f}")
-            self.logger.debug(f"   Diferença: ${abs(current_exposure - old_calculation):.2f}")
+            self.logger.debug(f"   Old method (margin×leverage): ${old_calculation:.2f}")
+            self.logger.debug(f"   New method (real position): ${current_exposure:.2f}")
+            self.logger.debug(f"   Difference: ${abs(current_exposure - old_calculation):.2f}")
             
-            self.logger.info(f"🔍 Verificando tamanho da posição: ${current_exposure:.2f} vs limite ${self.max_position_size:.2f}")
+            self.logger.info(f"🔍 Checking position size: ${current_exposure:.2f} vs limit ${self.max_position_size:.2f}")
             
             if current_exposure > self.max_position_size:
                 excess_amount = current_exposure - self.max_position_size
                 
-                self.logger.warning(f"⚠️ Posição excede limite!")
-                self.logger.warning(f"   Exposição atual: ${current_exposure:.2f}")
-                self.logger.warning(f"   Limite máximo: ${self.max_position_size:.2f}")
-                self.logger.warning(f"   Excesso: ${excess_amount:.2f}")
-                self.logger.info("🔧 Auto-close ativado - reduzindo posição...")
+                self.logger.warning(f"⚠️ Position exceeds limit!")
+                self.logger.warning(f"Current exposure: ${current_exposure:.2f}")
+                self.logger.warning(f"Maximum limit: ${self.max_position_size:.2f}")
+                self.logger.warning(f"Excess: ${excess_amount:.2f}")
+                self.logger.info("🔧 Auto-close activated - reducing position...")
                 
                 # Executar auto-close baseado na estratégia
                 freed_amount = self._auto_close_positions(excess_amount)
                 
                 if freed_amount > 0:
-                    self.logger.info(f"✅ Auto-close liberou ${freed_amount:.2f}")
+                    self.logger.info(f"✅ Auto-close freed ${freed_amount:.2f}")
                     
                     # Verificar se foi suficiente
                     new_exposure = self.get_current_exposure(symbol)
                     if new_exposure <= self.max_position_size:
-                        self.logger.info(f"✅ Posição agora dentro do limite: ${new_exposure:.2f} <= ${self.max_position_size:.2f}")
+                        self.logger.info(f"✅ Position now within limit: ${new_exposure:.2f} <= ${self.max_position_size:.2f}")
                     else:
                         remaining_excess = new_exposure - self.max_position_size
-                        self.logger.warning(f"⚠️ Ainda acima do limite em ${remaining_excess:.2f}")
+                        self.logger.warning(f"⚠️ Still above limit by ${remaining_excess:.2f}")
                 else:
-                    self.logger.warning("⚠️ Não foi possível reduzir a posição automaticamente")
+                    self.logger.warning("⚠️ Could not reduce position automatically")
             else:
-                # Tudo OK
+                # All OK
                 utilization = (current_exposure / self.max_position_size * 100) if self.max_position_size > 0 else 0
-                self.logger.debug(f"✅ Posição OK - Utilização: {utilization:.1f}% ({current_exposure:.2f}/{self.max_position_size:.2f})")
+                self.logger.debug(f"✅ Position OK - Utilization: {utilization:.1f}% ({current_exposure:.2f}/{self.max_position_size:.2f})")
                     
         except Exception as e:
-            self.logger.error(f"❌ Erro na verificação auto-close: {e}")
+            self.logger.error(f"❌ Error in auto-close check: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
 
     def _auto_close_positions(self, target_amount: float) -> float:
-        """🆕 Executa auto-close baseado na estratégia configurada"""
+        """🆕 Executes auto-close based on configured strategy"""
         
         freed_total = 0.0
         
         try:
-            # 🆕 ALIASES para compatibilidade com documentação
+            # 🆕 ALIASES for compatibility with documentation
             strategy = self.auto_close_strategy
             
-            # Mapeamento de aliases da documentação para nomes internos
+            # Strategy aliases from documentation to internal names
             strategy_aliases = {
                 'cancel_orders': 'cancel_distant_orders',
                 'force_sell': 'force_partial_sell', 
                 'stop_buy': 'stop_buy_orders'
             }
             
-            # Usar alias se existir, senão usar nome original
+            # Use alias if exists, otherwise use original name
             internal_strategy = strategy_aliases.get(strategy, strategy)
             
             if internal_strategy == 'cancel_distant_orders':
-                # Estratégia 1: Apenas cancelar ordens distantes
+                # Strategy 1: Only cancel distant orders
                 freed_total = self._cancel_distant_sell_orders()
                 
             elif internal_strategy == 'force_partial_sell':
-                # Estratégia 2: Venda forçada de parte da posição
+                # Strategy 2: Forced partial position sale
                 freed_total = self._force_partial_sell()
                 
             elif internal_strategy == 'stop_buy_orders':
-                # 🆕 Estratégia 3: LOSS MANAGEMENT - Cancelar ordens de compra apenas
-                self.logger.info(f"🔴 LOSS MANAGEMENT ativado - cancelando ordens de compra")
+                # 🆕 Strategy 3: LOSS MANAGEMENT - Cancel buy orders only
+                self.logger.info(f"🔴 LOSS MANAGEMENT activated - canceling buy orders")
                 cancelled_count = self.cancel_buy_orders_only()
-                # Não liberamos margem diretamente, mas evitamos acúmulo
+                # We don't free margin directly, but avoid accumulation
                 freed_total = 0.0  # Não conta como margem liberada
                 
             elif internal_strategy == 'hybrid':
-                # Estratégia 4: Híbrida - tentar cancelar primeiro, depois vender
+                # Strategy 4: Hybrid - try cancel first, then sell
                 freed_total = self._cancel_distant_sell_orders()
                 
                 if freed_total < target_amount:
-                    self.logger.info(f"🔄 Ainda precisa de ${target_amount - freed_total:.2f} - vendendo posição parcial")
+                    self.logger.info(f"🔄 Still need ${target_amount - freed_total:.2f} - selling partial position")
                     additional_freed = self._force_partial_sell()
                     freed_total += additional_freed
             
             else:
-                self.logger.warning(f"⚠️ Estratégia AUTO_CLOSE desconhecida: {strategy}")
+                self.logger.warning(f"⚠️ Unknown AUTO_CLOSE strategy: {strategy}")
                 return 0.0
             
             return freed_total
             
         except Exception as e:
-            self.logger.error(f"❌ Erro no auto-close: {e}")
+            self.logger.error(f"❌ Auto-close error: {e}")
             return 0.0
 
     def _cancel_distant_sell_orders(self) -> float:
-        """Cancela ordens sell muito distantes do preço atual"""
+        """Cancels very distant sell orders"""
         
         try:
             symbol = os.getenv('SYMBOL', 'SOL')
             current_price = self._get_current_price(symbol)
             
             if current_price <= 0:
-                self.logger.warning("⚠️ Não foi possível obter preço atual para cancelar ordens")
+                self.logger.warning("⚠️ Could not get current price to cancel orders")
                 return 0.0
             
             orders_to_cancel = []
             total_freed = 0
             
-            # Identificar ordens sell > 2% acima do preço atual
+            # Identify sell orders > 2% above current price
             for order_id, order_data in self.open_orders.items():
                 if (order_data['side'] == 'sell' and 
                     order_data['symbol'] == symbol):
@@ -1261,12 +1261,12 @@ class PositionManager:
                     order_price = order_data['price']
                     distance_percent = ((order_price - current_price) / current_price) * 100
                     
-                    # Cancelar sells > 2% acima do preço aproximado
+                    # Cancel sells > 2% above approximate price
                     if distance_percent > 2.0:
                         orders_to_cancel.append((order_id, order_data))
                         total_freed += order_data.get('value', 0)
             
-            # Cancelar ordens identificadas
+            # Cancel identified orders
             cancelled_count = 0
             for order_id, order_data in orders_to_cancel:
                 try:
@@ -1275,27 +1275,27 @@ class PositionManager:
                     if result:  # cancel_order retorna True/False
                         self.remove_order(order_id)
                         cancelled_count += 1
-                        self.logger.info(f"🗑️ Cancelada ordem distante: SELL @ ${order_data['price']:.2f}")
+                        self.logger.info(f"🗑️ Canceled distant order: SELL @ ${order_data['price']:.2f}")
                         
                 except Exception as e:
                     self.logger.error(f"❌ Erro ao cancelar ordem {order_id}: {e}")
             
             if cancelled_count > 0:
-                self.logger.info(f"🗑️ {cancelled_count} ordens distantes canceladas - ${total_freed:.2f} liberado")
+                self.logger.info(f"🗑️ {cancelled_count} distant orders canceled - ${total_freed:.2f} freed")
             
             return total_freed
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao cancelar ordens distantes: {e}")
+            self.logger.error(f"❌ Error canceling distant orders: {e}")
             return 0.0
 
     def cancel_buy_orders_only(self, symbol: str = None) -> int:
         """
-        🔴 LOSS MANAGEMENT: Cancela apenas ordens de COMPRA para evitar acumular mais posição
-        Mantém ordens de VENDA para reduzir exposição
+        🔴 LOSS MANAGEMENT: Cancels ONLY BUY orders to avoid accumulating more position
+        Keeps SELL orders to reduce exposure
         
         Args:
-            symbol: Símbolo (padrão: SOL do .env)
+            symbol: Symbol (default: SOL from .env)
             
         Returns:
             int: Número de ordens canceladas
@@ -1308,13 +1308,13 @@ class PositionManager:
             current_price = self._get_current_price(symbol)
             
             if current_price <= 0:
-                self.logger.warning("⚠️ Não foi possível obter preço atual para cancelar ordens de compra")
+                self.logger.warning("⚠️ Could not get current price to cancel buy orders")
                 return 0
             
             orders_to_cancel = []
             cancelled_count = 0
             
-            # Identificar APENAS ordens de COMPRA (buy/bid)
+            # Identify ONLY BUY orders (buy/bid)
             for order_id, order_data in self.open_orders.items():
                 if (order_data['side'] in ['buy', 'bid'] and 
                     order_data['symbol'] == symbol):
@@ -1322,8 +1322,8 @@ class PositionManager:
                     order_price = order_data['price']
                     orders_to_cancel.append((order_id, order_data))
             
-            # Cancelar ordens de compra identificadas
-            self.logger.info(f"🔴 LOSS MANAGEMENT: Cancelando {len(orders_to_cancel)} ordens de COMPRA para evitar acúmulo")
+            # Cancel identified buy orders
+            self.logger.info(f"🔴 LOSS MANAGEMENT: Canceling {len(orders_to_cancel)} BUY orders to avoid accumulation")
             
             for order_id, order_data in orders_to_cancel:
                 try:
@@ -1332,46 +1332,46 @@ class PositionManager:
                     if result:  # cancel_order retorna True/False
                         self.remove_order(order_id)
                         cancelled_count += 1
-                        self.logger.info(f"🗑️ Cancelada compra: BUY @ ${order_data['price']:.2f}")
+                        self.logger.info(f"🗑️ Canceled buy: BUY @ ${order_data['price']:.2f}")
                         
                 except Exception as e:
-                    self.logger.error(f"❌ Erro ao cancelar ordem de compra {order_id}: {e}")
+                    self.logger.error(f"❌ Error canceling buy order {order_id}: {e}")
             
             if cancelled_count > 0:
-                self.logger.info(f"✅ LOSS MANAGEMENT: {cancelled_count} ordens de COMPRA canceladas")
-                self.logger.info(f"🟢 Ordens de VENDA mantidas para reduzir exposição")
+                self.logger.info(f"✅ LOSS MANAGEMENT: {cancelled_count} BUY orders canceled")
+                self.logger.info(f"🟢 SELL orders kept to reduce exposure")
             else:
-                self.logger.info(f"ℹ️ Nenhuma ordem de compra encontrada para cancelar")
+                self.logger.info(f"ℹ️ No buy orders found to cancel")
             
             return cancelled_count
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao cancelar ordens de compra: {e}")
+            self.logger.error(f"❌ Error canceling buy orders: {e}")
             return 0
 
     def _force_partial_sell(self) -> float:
-        """Força venda de parte da posição para liberar espaço"""
+        """Forces sale of part of position to free space"""
         
         try:
             symbol = os.getenv('SYMBOL', 'SOL')
             
-            # 🔧 SINCRONIZAR COM API ANTES DE TENTAR VENDA
-            self.logger.info("🔄 Sincronizando posições com API antes da venda...")
+            # 🔧 SYNCHRONIZE WITH API BEFORE SELL ATTEMPT
+            self.logger.info("🔄 Synchronizing positions with API before sale...")
             self._sync_internal_state_with_api()
             
             if symbol not in self.positions:
-                self.logger.warning(f"⚠️ Nenhuma posição em {symbol} para vender")
+                self.logger.warning(f"⚠️ No position in {symbol} to sell")
                 return 0.0
             
             pos = self.positions[symbol]
             current_qty = pos.get('quantity', 0)
             
             if current_qty <= 0:
-                self.logger.warning(f"⚠️ Posição {symbol} já zerada ou short")
+                self.logger.warning(f"⚠️ Position {symbol} already zero or short")
                 return 0.0
             
-            # 🔧 VERIFICAR SE REALMENTE EXISTE POSIÇÃO NA API
-            self.logger.info(f"🔍 Verificando posição real na API para {symbol}...")
+            # 🔧 CHECK IF POSITION REALLY EXISTS IN API
+            self.logger.info(f"🔍 Checking real position in API for {symbol}...")
             api_positions = self.auth.get_positions()
             api_has_position = False
             api_quantity = 0.0
@@ -1390,71 +1390,70 @@ class PositionManager:
                             break
             
             if not api_has_position or api_quantity <= 0:
-                self.logger.warning(f"⚠️ API não confirma posição aberta em {symbol} (amount: {api_quantity})")
-                self.logger.warning(f"⚠️ Removendo posição interna inconsistente")
-                # Limpar posição interna inconsistente
+                self.logger.warning(f"⚠️ API does not confirm open position in {symbol} (amount: {api_quantity})")
+                self.logger.warning(f"⚠️ Removing inconsistent internal position")
+                # Update position internally
                 if symbol in self.positions:
                     del self.positions[symbol]
                 return 0.0
             
-            # 🔧 USAR QUANTIDADE REAL DA API PARA CÁLCULOS
-            self.logger.info(f"✅ Posição confirmada na API: {api_quantity} {symbol}")
+            # 🔧 USE REAL API QUANTITY FOR CALCULATIONS
+            self.logger.info(f"✅ Position confirmed in API: {api_quantity} {symbol}")
             
-            # Calcular quantidade a vender (percentual configurado)
+            # Calculate quantity to sell (configured percentage)
             sell_percentage = self.auto_close_percentage / 100
             qty_to_sell = api_quantity * sell_percentage
-            # Determinar o lado da ordem para reduzir posição
-            # Se posição é short (ask), ordem de compra ('bid')
+            # Determine order side to reduce position
+            # If position is short (ask), buy order ('bid')
             # Se posição é long (bid), ordem de venda ('ask')
             order_side = 'bid' if position_side == 'ask' else 'ask'
             if qty_to_sell < 0.001:
-                self.logger.warning(f"⚠️ Quantidade a reduzir muito pequena: {qty_to_sell}")
+                self.logger.warning(f"⚠️ Quantity to reduce too small: {qty_to_sell}")
                 return 0.0
             
-            # Obter preço atual do mercado (mais preciso que estimativas)
+            # Get current market price (more accurate than estimates)
             current_price = self._get_current_price(symbol)
             if current_price <= 0:
-                # Tentar usar preço da posição interna como fallback
+                # Try using internal position price as fallback
                 pos = self.positions.get(symbol, {})
                 current_price = pos.get('entry_price', 0)
             
             if current_price <= 0:
-                self.logger.warning(f"⚠️ Não foi possível obter preço para {symbol}")
+                self.logger.warning(f"⚠️ Could not get price for {symbol}")
                 return 0.0
             
             freed_value = qty_to_sell * current_price
             
-            # Log da operação
-            self.logger.info(f"💰 Vendendo {self.auto_close_percentage}% da posição: {qty_to_sell:.6f} {symbol}")
-            self.logger.info(f"💰 Preço atual: ${current_price:.2f} - Valor a liberar: ${freed_value:.2f}")
+            # Operation log
+            self.logger.info(f"💰 Selling {self.auto_close_percentage}% of position: {qty_to_sell:.6f} {symbol}")
+            self.logger.info(f"💰 Current price: ${current_price:.2f} - Value to free: ${freed_value:.2f}")
             
-            # 🔥 EXECUÇÃO REAL DA VENDA (ativada)
+            # 🔥 REAL SALE EXECUTION (activated)
             try:
-                # Criar ordem para venda imediata  
-                # Usar preço ligeiramente abaixo do mercado para garantir execução
-                market_price = current_price * 0.999  # -0.1% do preço atual
+                # Creating order for immediate sale  
+                # Use price slightly below market to ensure execution
+                market_price = current_price * 0.999  # -0.1% of current price
                 
-                # 🔧 ARREDONDAR PREÇO PARA TICK_SIZE usando função do auth
+                # 🔧 ROUND PRICE TO TICK_SIZE using auth function
                 tick_size = self.auth._get_tick_size(symbol)
                 market_price = self.auth._round_to_tick_size(market_price, tick_size)
                 
-                # 🔧 ARREDONDAR QUANTIDADE PARA LOT_SIZE  
+                # 🔧 ROUND QUANTITY TO LOT_SIZE  
                 lot_size = self.auth._get_lot_size(symbol)
                 qty_to_sell = self.auth._round_to_lot_size(qty_to_sell, lot_size)
                 
                 self.logger.info(f"🔧 Quantidade ajustada para lot_size {lot_size}: {qty_to_sell} {symbol}")
                 qty_to_sell = round(qty_to_sell, 2)  # Máximo 2 casas decimais para exibição
                 
-                self.logger.info(f"📄 Criando ordem: ask {qty_to_sell} {symbol} @ ${market_price}")
+                self.logger.info(f"📄 Creating order: ask {qty_to_sell} {symbol} @ ${market_price}")
                 
-                # 🔧 VERIFICAÇÃO FINAL ANTES DE ENVIAR ORDEM
-                # Dupla verificação para evitar erro "No position found for reduce-only order"
+                # 🔧 FINAL VERIFICATION BEFORE SENDING ORDER
+                # Double check to avoid 'No position found for reduce-only order' error"
                 final_check = self.auth.get_positions()
                 has_final_position = False
                 if final_check and isinstance(final_check, list):
                     for pos_check in final_check:
                         if pos_check.get('symbol') == symbol:
-                            amt_final = float(pos_check.get('amount', 0))
                             side_final = pos_check.get('side', '').lower()
                             # Para short, precisa de pelo menos qty_to_sell em posição 'ask'; para long, em 'bid'
                             if position_side == 'ask' and abs(amt_final) >= qty_to_sell and side_final == 'ask':
@@ -1464,62 +1463,62 @@ class PositionManager:
                                 has_final_position = True
                                 break
                 if not has_final_position:
-                    self.logger.warning(f"⚠️ ABORTAR: Posição insuficiente na verificação final")
-                    self.logger.warning(f"⚠️ Necessário: {qty_to_sell}, mas posição pode ter mudado")
+                    self.logger.warning(f"⚠️ ABORT: Insufficient position on final check")
+                    self.logger.warning(f"⚠️ Required: {qty_to_sell}, but position may have changed")
                     return 0.0
                 
                 result = self.auth.create_order(
                     symbol=symbol,
-                    side=order_side,  # lado correto para reduzir posição
+                    side=order_side,  # Correct side to reduce position
                     amount=str(qty_to_sell),
                     price=str(market_price),
                     order_type="GTC",
-                    reduce_only=True  # Para reduzir posição existente
+                    reduce_only=True  # To reduce existing position
                 )
                 
                 if result and result.get('success'):
                     order_id = result.get('order_id', 'N/A')
-                    self.logger.info(f"✅ Ordem de venda parcial criada!")
-                    self.logger.info(f"✅ ID: {order_id} - Preço: ${market_price:.2f}")
+                    self.logger.info(f"✅ Partial sell order created!")
+                    self.logger.info(f"✅ ID: {order_id} - Price: ${market_price:.2f}")
                 else:
                     error_msg = result.get('error', 'Erro desconhecido') if result else 'Resposta nula'
-                    self.logger.error(f"❌ Falha na ordem reduce_only: {error_msg}")
+                    self.logger.error(f"❌ Reduce-only order failed: {error_msg}")
                     
                     # 🔧 FALLBACK: Tentar sem reduce_only se o erro for de posição não encontrada
                     if "No position found" in str(error_msg):
-                        self.logger.warning(f"🔄 Tentando ordem sem reduce_only como fallback...")
+                        self.logger.warning(f"🔄 Trying non-reduce-only order as fallback...")
                         fallback_result = self.auth.create_order(
                             symbol=symbol,
                             side='ask',
                             amount=str(qty_to_sell),
                             price=str(market_price),
                             order_type="GTC",
-                            reduce_only=False  # Sem reduce_only
+                            reduce_only=False  # Without reduce_only
                         )
                         
                         if fallback_result and fallback_result.get('success'):
                             order_id = fallback_result.get('order_id', 'N/A')
-                            self.logger.info(f"✅ Ordem fallback criada: {order_id}")
+                            self.logger.info(f"✅ Fallback order created: {order_id}")
                         else:
                             fallback_error = fallback_result.get('error', 'Erro desconhecido') if fallback_result else 'Resposta nula'
-                            self.logger.error(f"❌ Fallback também falhou: {fallback_error}")
+                            self.logger.error(f"❌ Fallback also failed: {fallback_error}")
                             return 0.0
                     else:
                         return 0.0
                         
             except Exception as e:
-                self.logger.error(f"❌ Erro ao executar venda: {e}")
+                self.logger.error(f"❌ Sale execution error: {e}")
                 return 0.0
             
-            # Atualizar posição internamente
+            # Update position internally
             pos['quantity'] -= qty_to_sell
             if pos['quantity'] < 0.001:
                 pos['quantity'] = 0  # Zerar se muito pequeno
             
-            self.logger.info(f"📊 Nova posição {symbol}: {pos['quantity']:.6f}")
+            self.logger.info(f"📊 New position {symbol}: {pos['quantity']:.6f}")
             
             return freed_value
             
         except Exception as e:
-            self.logger.error(f"❌ Erro na venda parcial: {e}")
+            self.logger.error(f"❌ Partial sell error: {e}")
             return 0.0
