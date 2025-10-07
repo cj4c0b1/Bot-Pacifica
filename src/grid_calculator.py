@@ -39,7 +39,7 @@ class GridCalculator:
         self.lot_size = 0.00001  # Default
         self.min_order_size = 10  # USD
         
-        # Buscar info do mercado se auth fornecido
+        # Fetch market info if auth client is provided
         if auth_client:
             self._load_market_info(auth_client)
         
@@ -47,8 +47,8 @@ class GridCalculator:
         self.range_min = float(os.getenv('RANGE_MIN', '0'))
         self.range_max = float(os.getenv('RANGE_MAX', '0'))
         
-        self.logger.info(f"Grid adaptativo: {'ATIVO' if self.adaptive_mode else 'INATIVO'}")
-        self.logger.info(f"GridCalculator inicializado: {self.grid_levels} níveis, {self.spacing_percent}% spacing, tick_size={self.tick_size}")
+        self.logger.info(f"Adaptive grid: {'ACTIVE' if self.adaptive_mode else 'INACTIVE'}")
+        self.logger.info(f"GridCalculator initialized: {self.grid_levels} levels, {self.spacing_percent}% spacing, tick_size={self.tick_size}")
     
     def calculate_grid_levels(self, current_price: float) -> Dict[str, List[float]]:
         """Calcula os níveis do grid baseado na estratégia"""
@@ -104,8 +104,8 @@ class GridCalculator:
         sell_levels = []
         
         # Log do espaçamento sendo usado
-        self.logger.info(f"Calculando grid: {buy_count} buy + {sell_count} sell = {buy_count + sell_count} total")
-        self.logger.info(f"📊 Espaçamento efetivo: {effective_spacing:.3f}% (base: {self.spacing_percent:.3f}%)")
+        self.logger.info(f"Calculating grid: {buy_count} buy + {sell_count} sell = {buy_count + sell_count} total")
+        self.logger.info(f"📊 Effective spacing: {effective_spacing:.3f}% (base: {self.spacing_percent:.3f}%)")
 
         # Calcular níveis de compra (abaixo do preço) - USAR effective_spacing
         for i in range(1, buy_count + 1):
@@ -138,7 +138,7 @@ class GridCalculator:
         valid_prices = [p for p in prices if p > 0]
         
         if len(valid_prices) < 2:
-            self.logger.warning("⚠️ Preços válidos insuficientes para calcular volatilidade")
+            self.logger.warning("⚠️ Insufficient valid prices to calculate volatility")
             return 0.01
         
         # Calcular retornos logarítmicos
@@ -173,7 +173,7 @@ class GridCalculator:
         
         # 🔧 VERIFICAR PREÇO VÁLIDO
         if current_price <= 0:
-            self.logger.warning(f"⚠️ Preço inválido para spacing adaptativo: {current_price}")
+            self.logger.warning(f"⚠️ Invalid price for adaptive spacing: {current_price}")
             return self.spacing_percent
         
         # Adicionar preço atual ao histórico
@@ -181,7 +181,7 @@ class GridCalculator:
         
         # Precisa de pelo menos 5 preços para calcular volatilidade
         if len(self.price_history) < 5:
-            self.logger.debug("📊 Histórico insuficiente - usando espaçamento base")
+            self.logger.debug("📊 Insufficient history - using base spacing")
             return self.spacing_percent
         
         # Calcular volatilidade atual
@@ -193,7 +193,7 @@ class GridCalculator:
         
         # 🔧 VERIFICAÇÃO ADICIONAL DE SEGURANÇA  
         if reference_volatility <= 0:
-            self.logger.error("❌ Volatilidade de referência inválida!")
+            self.logger.error("❌ Invalid reference volatility!")
             return self.spacing_percent
         
         # Calcular multiplicador baseado na volatilidade
@@ -210,11 +210,11 @@ class GridCalculator:
         
         # 🔧 GARANTIR QUE SPACING NUNCA SEJA ZERO OU NEGATIVO
         if adaptive_spacing <= 0:
-            self.logger.warning(f"⚠️ Spacing adaptativo inválido: {adaptive_spacing} - usando base")
+            self.logger.warning(f"⚠️ Invalid adaptive spacing: {adaptive_spacing} - using base")
             adaptive_spacing = self.spacing_percent
         
-        self.logger.info(f"📊 Grid adaptativo: volatilidade={current_volatility:.4f}, "
-                        f"multiplicador={multiplier:.2f}, spacing={adaptive_spacing:.3f}%")
+        self.logger.info(f"📊 Adaptive grid: volatility={current_volatility:.4f}, "
+                        f"multiplier={multiplier:.2f}, spacing={adaptive_spacing:.3f}%")
         
         return adaptive_spacing
 
@@ -239,7 +239,7 @@ class GridCalculator:
         
         # 🔧 VERIFICAR PREÇO VÁLIDO
         if price <= 0:
-            self.logger.error(f"❌ Preço inválido para cálculo de quantidade: ${price}")
+            self.logger.error(f"❌ Invalid price for quantity calculation: ${price}")
             return 0.0
         
         # Calcular quantidade bruta
@@ -256,9 +256,9 @@ class GridCalculator:
         return quantity
     
     def _load_market_info(self, auth_client):
-        """Carrega informações do mercado (tick_size, lot_size, etc)"""
+        """Load market information (tick_size, lot_size, etc)"""
         try:
-            self.logger.info(f"🔍 Buscando market info para {self.symbol}...")
+            self.logger.info(f"🔍 Fetching market info for {self.symbol}...")
             
             info = auth_client.get_symbol_info(self.symbol)
             
@@ -267,18 +267,18 @@ class GridCalculator:
                 self.lot_size = float(info.get('lot_size', 0.00001))
                 self.min_order_size = float(info.get('min_order_size', 10))
                 
-                self.logger.info(f"✅ Market info carregado para {self.symbol}:")
+                self.logger.info(f"✅ Market info loaded for {self.symbol}:")
                 self.logger.info(f"   tick_size: {self.tick_size}")
                 self.logger.info(f"   lot_size: {self.lot_size}")
                 self.logger.info(f"   min_order_size: {self.min_order_size}")
                 return True
             else:
-                self.logger.warning(f"⚠️ Market info não encontrado para {self.symbol}")
-                self.logger.warning(f"⚠️ Usando valores padrão: tick={self.tick_size}, lot={self.lot_size}")
+                self.logger.warning(f"⚠️ Market info not found for {self.symbol}")
+                self.logger.warning(f"⚠️ Using default values: tick={self.tick_size}, lot={self.lot_size}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"⚠️ Erro ao carregar market info: {e}")
+            self.logger.error(f"⚠️ Error loading market info: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
             return False
@@ -339,7 +339,7 @@ class GridCalculator:
         if result == 0 and quantity > 0:
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"⚠️ Arredondamento para zero detectado!")
+            logger.warning(f"⚠️ Rounding to zero detected!")
             logger.warning(f"   quantity: {quantity}")
             logger.warning(f"   lot_size: {self.lot_size}")
             logger.warning(f"   lot_str: {lot_str}")
@@ -398,7 +398,7 @@ class GridCalculator:
         price_change_percent = abs((current_price - grid_center) / grid_center * 100)
         
         if price_change_percent >= threshold:
-            self.logger.info(f"Grid shift necessário: {price_change_percent:.2f}% > {threshold}%")
+            self.logger.info(f"Grid shift needed: {price_change_percent:.2f}% > {threshold}%")
             return True
         
         return False
@@ -410,13 +410,13 @@ class GridCalculator:
             # Se comprou, vender no próximo nível acima
             target_price = entry_price * (1 + self.spacing_percent / 100)
             # 🆕 NEW: Log debug para rastreamento
-            self.logger.debug(f"Target para BUY: ${entry_price} -> ${target_price} (+{self.spacing_percent}%)")
+            self.logger.debug(f"Target for BUY: ${entry_price} -> ${target_price} (+{self.spacing_percent}%)")
             # 🆕 END NEW
         else:  # sell
             # Se vendeu, comprar no próximo nível abaixo
             target_price = entry_price * (1 - self.spacing_percent / 100)
             # 🆕 NEW: Log debug para rastreamento
-            self.logger.debug(f"Target para SELL: ${entry_price} -> ${target_price} (-{self.spacing_percent}%)")
+            self.logger.debug(f"Target for SELL: ${entry_price} -> ${target_price} (-{self.spacing_percent}%)")
             # 🆕 END NEW
         
         # 🆕 NEW: Arredondar para tick_size válido

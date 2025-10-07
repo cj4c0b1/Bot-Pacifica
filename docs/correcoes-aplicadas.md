@@ -1680,11 +1680,11 @@ def update_account_state(self) -> bool:
 **Logs Detalhados para Debug:**
 ```python
 self.logger.info("=" * 70)
-self.logger.info("💰 ESTADO DA CONTA:")
-self.logger.info(f"   Saldo: ${self.account_balance:.2f}")
+self.logger.info("💰 Account status:")
+self.logger.info(f"   Balance: ${self.account_balance:.2f}")
 self.logger.info(f"   Equity: ${account_equity:.2f}")
-self.logger.info(f"   Margem Usada: ${self.margin_used:.2f}")
-self.logger.info(f"   Margem Disponível: ${self.margin_available:.2f}")
+self.logger.info(f"   Used margin: ${self.margin_used:.2f}")
+self.logger.info(f"   Available margin: ${self.margin_available:.2f}")
 self.logger.info("=" * 70)
 ```
 

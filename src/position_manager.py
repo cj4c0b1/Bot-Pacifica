@@ -1,5 +1,5 @@
 """
-Position Manager - Gerenciamento de posições, margem e risco
+Position Manager - Position, Margin, and Risk Management
 """
 
 import os
@@ -13,63 +13,63 @@ class PositionManager:
         self.logger = logging.getLogger('PacificaBot.PositionManager')
         self.auth = auth_client
 
-        # ========== SISTEMA 1: Cancelamento de Ordens ==========
+        # ========== SYSTEM 1: Order Cancellation ==========
         self.auto_cancel_orders = os.getenv('AUTO_CANCEL_ORDERS_ON_LOW_MARGIN', 'true').lower() == 'true'
         self.cancel_orders_threshold = float(os.getenv('CANCEL_ORDERS_MARGIN_THRESHOLD', '20'))
         self.cancel_orders_percentage = float(os.getenv('CANCEL_ORDERS_PERCENTAGE', '30'))
         
-        # ========== SISTEMA 2: Redução de Posição (NOVO) ==========
+        # ========== SYSTEM 2: Position Reduction (NEW) ==========
         self.auto_reduce_position = os.getenv('AUTO_REDUCE_POSITION_ON_LOW_MARGIN', 'true').lower() == 'true'
         self.reduce_position_threshold = float(os.getenv('REDUCE_POSITION_MARGIN_THRESHOLD', '10'))
         self.reduce_position_percentage = float(os.getenv('REDUCE_POSITION_PERCENTAGE', '20'))
         
-        # Log das configurações
+        # Log settings
         if self.auto_cancel_orders:
-            self.logger.info(f"🔧 Auto-cancel orders ATIVO: margem < {self.cancel_orders_threshold}%")
+            self.logger.info(f"🔧 Auto-cancel orders ENABLED: margin < {self.cancel_orders_threshold}%")
         
         if self.auto_reduce_position:
-            self.logger.info(f"🔧 Auto-reduce position ATIVO: margem < {self.reduce_position_threshold}%")
+            self.logger.info(f"🔧 Auto-reduce position ENABLED: margin < {self.reduce_position_threshold}%")
         
         self.max_position_size = float(os.getenv('MAX_POSITION_SIZE_USD', '1000'))
         self.max_open_orders = int(os.getenv('MAX_OPEN_ORDERS', '20'))
         self.leverage = int(os.getenv('LEVERAGE', '10'))
         
-        # 🆕 Configurações de Auto-Close
+        # 🆕 Auto-Close Settings
         self.auto_close_on_limit = os.getenv('AUTO_CLOSE_ON_MAX_POSITION', 'true').lower() == 'true'
-        # Estratégias: cancel_distant_orders, force_partial_sell, stop_buy_orders, hybrid
+        # Strategies: cancel_distant_orders, force_partial_sell, stop_buy_orders, hybrid
         self.auto_close_strategy = os.getenv('AUTO_CLOSE_STRATEGY', 'hybrid')  
-        self.auto_close_percentage = float(os.getenv('AUTO_CLOSE_PERCENTAGE', '20'))  # Percentual da posição a vender
+        self.auto_close_percentage = float(os.getenv('AUTO_CLOSE_PERCENTAGE', '20'))  # Percentage of position to close
         
-        # Estado interno
+        # Internal state
         self.open_orders = {}  # {order_id: order_data}
         self.positions = {}    # {symbol: position_data}
         self.account_balance = 0
         self.margin_used = 0
         self.margin_available = 0
         
-        self.logger.info(f"PositionManager inicializado - Safety: {self.reduce_position_percentage}%, Max Position: ${self.max_position_size}")
+        self.logger.info(f"PositionManager initialized - Safety: {self.reduce_position_percentage}%, Max Position: ${self.max_position_size}")
         if self.auto_close_on_limit:
-            self.logger.info(f"🔧 Auto-close ATIVADO: {self.auto_close_strategy}, {self.auto_close_percentage}%")
+            self.logger.info(f"🔧 Auto-close ENABLED: {self.auto_close_strategy}, {self.auto_close_percentage}%")
     
     def get_current_exposure(self, symbol: Optional[str] = None) -> float:
         """
-        Calcula exposição ATUAL baseada em posições reais da API
+        Calculates CURRENT exposure based on actual API positions
         
-        IMPORTANTE: API Pacifica não retorna positionValue ou markPrice,
-        então calculamos: amount × preço_atual
+        IMPORTANT: Pacifica API doesn't return positionValue or markPrice,
+        so we calculate: amount × current_price
         
         Args:
-            symbol: Se fornecido, retorna exposição apenas deste símbolo
+            symbol: If provided, returns exposure only for this symbol
             
         Returns:
-            float: Exposição total em USD baseada no valor atual das posições
+            float: Total exposure in USD based on current position values
         """
         try:
-            # Buscar posições abertas da API
+            # Fetch open positions from API
             positions = self.auth.get_positions()
             
             if not positions:
-                self.logger.debug("📊 Nenhuma posição aberta - exposição = $0")
+                self.logger.debug("📊 No open positions - exposure = $0")
                 return 0.0
             
             total_exposure = 0.0
@@ -77,11 +77,11 @@ class PositionManager:
             for position in positions:
                 pos_symbol = position.get('symbol', '')
                 
-                # Filtrar por símbolo se especificado
+                # Filter by symbol if specified
                 if symbol and pos_symbol != symbol:
                     continue
                 
-                # ✅ CAMPOS QUE A API RETORNA
+                # ✅ FIELDS RETURNED BY API
                 amount = abs(float(position.get('amount', 0)))
                 entry_price = float(position.get('entry_price', position.get('entryPrice', 0)))
                 side = position.get('side', 'bid')
@@ -89,18 +89,18 @@ class PositionManager:
                 if amount == 0:
                     continue
                 
-                # 🎯 OBTER PREÇO ATUAL DO MERCADO
+                # 🎯 GET CURRENT MARKET PRICE
                 current_price = self._get_current_price(pos_symbol)
                 
-                # Se não conseguir preço atual, usar entry_price como fallback
+                # If can't get current price, use entry_price as fallback
                 if current_price == 0:
                     current_price = entry_price
                     self.logger.warning(
-                        f"⚠️ {pos_symbol}: Usando entry_price como fallback "
-                        f"(não conseguiu obter preço atual)"
+                        f"⚠️ {pos_symbol}: Using entry_price as fallback "
+                        f"(failed to get current price)"
                     )
                 
-                # ✅ CALCULAR VALOR ATUAL DA POSIÇÃO
+                # ✅ CALCULATE CURRENT POSITION VALUE
                 position_value = amount * current_price
                 
                 total_exposure += position_value
@@ -113,59 +113,59 @@ class PositionManager:
                 self.logger.debug(f"   Position Value: ${position_value:.2f}")
             
             if total_exposure > 0:
-                self.logger.info(f"💰 Exposição total calculada: ${total_exposure:.2f}")
+                self.logger.info(f"💰 Total calculated exposure: ${total_exposure:.2f}")
             else:
-                self.logger.debug(f"💰 Exposição total: ${total_exposure:.2f}")
+                self.logger.debug(f"💰 Total exposure: ${total_exposure:.2f}")
             
             return total_exposure
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao calcular exposição atual: {e}")
+            self.logger.error(f"❌ Error calculating current exposure: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
-            # Fallback para método antigo
+            # Fallback to legacy method
             return self._fallback_exposure_calculation()
 
     def _get_current_price(self, symbol: str) -> float:
         """
-        Obtém preço atual do símbolo com fallback em cascata
+        Gets current price for symbol with cascading fallback
         
-        Tenta obter preço na seguinte ordem:
-        1. mark (mark price - preferencial)
-        2. mid (preço médio)
-        3. last (último trade)
-        4. bid (melhor oferta de compra)
+        Tries to get price in this order:
+        1. mark (mark price - preferred)
+        2. mid (mid price)
+        3. last (last trade)
+        4. bid (best bid)
         
         Args:
-            symbol: Símbolo do ativo (ex: 'XRP', 'SOL')
+            symbol: Asset symbol (e.g., 'XRP', 'SOL')
             
         Returns:
-            float: Preço atual ou 0.0 se não encontrado
+            float: Current price or 0.0 if not found
         """
         try:
-            # Buscar preços da API
+            # Fetch prices from API
             price_data = self.auth.get_prices()
             
-            # Validar resposta
+            # Validate response
             if not price_data or 'data' not in price_data:
-                self.logger.warning("⚠️ Dados de preço não encontrados na resposta")
+                self.logger.warning("⚠️ Price data not found in response")
                 return 0.0
             
-            # Verificar flag de sucesso (se existir)
+            # Check success flag (if it exists)
             if price_data.get('success') == False:
-                self.logger.warning(f"⚠️ API de preços retornou success=False")
+                self.logger.warning(f"⚠️ Price API returned success=False")
                 return 0.0
             
-            # Procurar símbolo nos dados
+            # Find symbol in data
             for item in price_data['data']:
                 item_symbol = item.get('symbol', '')
                 
                 if item_symbol == symbol:
-                    # ✅ FALLBACK EM CASCATA
-                    # Tentar mark primeiro (mais confiável)
+                    # ✅ CASCADING FALLBACK
+                    # Try mark first (most reliable)
                     price = float(item.get('mark', 0))
                     
-                    # Se mark = 0, tentar alternativas
+                    # If mark = 0, try alternatives
                     if price == 0:
                         price = float(item.get('mid', 0))
                     
@@ -175,28 +175,28 @@ class PositionManager:
                     if price == 0:
                         price = float(item.get('bid', 0))
                     
-                    # Validar se encontrou preço válido
+                    # Validate if valid price was found
                     if price > 0:
-                        self.logger.debug(f"✅ Preço {symbol}: ${price:.4f}")
+                        self.logger.debug(f"✅ {symbol} price: ${price:.4f}")
                         return price
                     else:
-                        self.logger.warning(f"⚠️ Nenhum preço válido encontrado para {symbol}")
+                        self.logger.warning(f"⚠️ No valid price found for {symbol}")
                         return 0.0
             
-            # Se não encontrou o símbolo
-            self.logger.warning(f"⚠️ Símbolo {symbol} não encontrado nos dados de preço")
+            # If symbol not found
+            self.logger.warning(f"⚠️ Symbol {symbol} not found in price data")
             return 0.0
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao obter preço atual: {e}")
+            self.logger.error(f"❌ Error getting current price: {e}")
             return 0.0
 
     def _fallback_exposure_calculation(self) -> float:
         """
-        Método de fallback: calcula exposição baseado em ordens abertas
+        Fallback method: calculates exposure based on open orders
         """
         total = sum(o.get('value', 0) for o in self.open_orders.values())
-        self.logger.warning(f"⚠️ Usando cálculo de fallback (ordens): ${total:.2f}")
+        self.logger.warning(f"⚠️ Using fallback calculation (orders): ${total:.2f}")
         return total
 
     def get_position_summary(self, symbol: Optional[str] = None) -> Dict:
@@ -329,7 +329,7 @@ class PositionManager:
                 if not symbol:
                     continue
                 
-                # ✅ USAR CAMPOS CORRETOS DA API
+                # ✅ USE CORRECT API FIELDS
                 amount = abs(float(pos.get('amount', 0)))
                 entry_price = float(pos.get('entry_price', pos.get('entryPrice', 0)))
                 side = pos.get('side', 'bid')
@@ -337,8 +337,8 @@ class PositionManager:
                 if amount == 0 or entry_price == 0:
                     continue
                 
-                # Determinar se é long ou short
-                # Se side='bid' geralmente é long, 'ask' é short
+                # Determine if it's long or short
+                # If side='bid' it's usually long, 'ask' is short
                 quantity = amount if side == 'bid' else -amount
                 
                 self.positions[symbol] = {
@@ -351,54 +351,54 @@ class PositionManager:
                     'amount': amount
                 }
                 
-                self.logger.info(f"✅ Posição {symbol}: {quantity:+.4f} @ ${entry_price:.4f}")
+                self.logger.info(f"✅ Position {symbol}: {quantity:+.4f} @ ${entry_price:.4f}")
             
-            self.logger.info(f"📍 {len(self.positions)} posições carregadas: {list(self.positions.keys())}")
+            self.logger.info(f"📍 {len(self.positions)} positions loaded: {list(self.positions.keys())}")
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao carregar posições: {e}")
+            self.logger.error(f"❌ Error loading positions: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
 
     def update_account_state(self) -> bool:
-        """Atualiza estado da conta (saldo, margem, posições)"""
+        """Updates account state (balance, margin, positions)"""
         
         try:
-            self.logger.info("🔄 Atualizando estado da conta...")
+            self.logger.info("🔄 Updating account state...")
             
             account_data = self.auth.get_account_info()
             
             if not account_data:
-                self.logger.error("❌ get_account_info() retornou None")
+                self.logger.error("❌ get_account_info() returned None")
                 return False
             
-            self.logger.info(f"📦 Resposta recebida: success={account_data.get('success')}")
+            self.logger.info(f"📦 Response received: success={account_data.get('success')}")
             
             if not account_data.get('success'):
-                error_msg = account_data.get('error', 'Erro desconhecido')
+                error_msg = account_data.get('error', 'Unknown error')
                 self.logger.error(f"❌ success=false: {error_msg}")
                 return False
             
             if 'data' not in account_data:
-                self.logger.error("❌ Chave 'data' não encontrada")
+                self.logger.error("❌ 'data' key not found")
                 return False
             
-            # 🔥 SUPORTAR AMBOS: ARRAY OU OBJETO
+            # 🔥 SUPPORT BOTH: ARRAY OR OBJECT
             raw_data = account_data['data']
             
-            self.logger.info(f"📋 Tipo de 'data': {type(raw_data)}")
+            self.logger.info(f"📋 Data type: {type(raw_data)}")
             
             if isinstance(raw_data, list):
-                self.logger.info("   → Formato ARRAY")
+                self.logger.info("   → Array format")
                 if len(raw_data) == 0:
-                    self.logger.error("❌ Array vazio")
+                    self.logger.error("❌ Array empty")
                     return False
                 data = raw_data[0]
             elif isinstance(raw_data, dict):
-                self.logger.info("   → Formato OBJETO")
+                self.logger.info("   → Object format")
                 data = raw_data
             else:
-                self.logger.error(f"❌ Formato desconhecido: {type(raw_data)}")
+                self.logger.error(f"❌ Unknown format: {type(raw_data)}")
                 return False
             
             # Extrair valores
@@ -412,18 +412,18 @@ class PositionManager:
             
             # Log dos valores
             self.logger.info("=" * 70)
-            self.logger.info("💰 ESTADO DA CONTA:")
-            self.logger.info(f"   Saldo: ${self.account_balance:.2f}")
+            self.logger.info("💰 Account status:")
+            self.logger.info(f"   Balance: ${self.account_balance:.2f}")
             self.logger.info(f"   Equity: ${account_equity:.2f}")
-            self.logger.info(f"   Margem Usada: ${self.margin_used:.2f}")
-            self.logger.info(f"   Margem Disponível: ${self.margin_available:.2f}")
+            self.logger.info(f"   Margem Used: ${self.margin_used:.2f}")
+            self.logger.info(f"   Margem Available: ${self.margin_available:.2f}")
             
             if self.account_balance > 0:
                 margin_percent = (self.margin_available / self.account_balance) * 100
-                self.logger.info(f"   Margem Livre: {margin_percent:.1f}%")
+                self.logger.info(f"   Margem Free: {margin_percent:.1f}%")
             
-            self.logger.info(f"   Posições: {positions_count}")
-            self.logger.info(f"   Ordens: {orders_count}")
+            self.logger.info(f"   Positions: {positions_count}")
+            self.logger.info(f"   Orders: {orders_count}")
             self.logger.info("=" * 70)
 
             if positions_count > 0:
@@ -432,16 +432,16 @@ class PositionManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ ERRO: {e}")
+            self.logger.error(f"❌ Error: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
             return False
             
         except Exception as e:
             self.logger.error("=" * 70)
-            self.logger.error(f"❌ ERRO CRÍTICO em update_account_state:")
-            self.logger.error(f"   Tipo: {type(e).__name__}")
-            self.logger.error(f"   Mensagem: {str(e)}")
+            self.logger.error(f"❌ CRITICAL ERROR in update_account_state:")
+            self.logger.error(f"   Type: {type(e).__name__}")
+            self.logger.error(f"   Message: {str(e)}")
             import traceback
             self.logger.error("   Stack trace:")
             for line in traceback.format_exc().split('\n'):
@@ -451,20 +451,20 @@ class PositionManager:
             return False
     
     def _sync_internal_state_with_api(self):
-        """ Sincroniza estado interno com API real - FILTRANDO POR SÍMBOLO"""
+        """Synchronizes internal state with real API - FILTERING BY SYMBOL"""
         
         try:
-            # Obter símbolo configurado
+            # Get configured symbol
             current_symbol = os.getenv('SYMBOL', 'BTC')
             
-            # Obter ordens abertas REAIS da API
+            # Get REAL open orders from API
             real_open_orders = self.auth.get_open_orders()
             
             if real_open_orders is None:
-                self.logger.warning("⚠️ Não foi possível obter ordens da API para sincronização")
+                self.logger.warning("⚠️ Could not get orders from API for synchronization")
                 return
             
-            # 🔧 FILTRAR POR SÍMBOLO PRIMEIRO, DEPOIS POR TIPO
+            # 🔧 FILTER BY SYMBOL FIRST, THEN BY TYPE
             symbol_filtered_orders = []
             other_symbol_orders = []
             
@@ -474,12 +474,12 @@ class PositionManager:
                 else:
                     other_symbol_orders.append(order)
             
-            # 🔧 FILTRAR APENAS ORDENS PRINCIPAIS (não TP/SL) DO SÍMBOLO ATUAL
+            # 🔧 FILTER ONLY MAIN ORDERS (not TP/SL) FOR CURRENT SYMBOL
             main_orders = []
             tp_sl_orders = []
             
             for order in symbol_filtered_orders:
-                # Identificar TP/SL pelos campos da API
+                # Identify TP/SL by API fields
                 stop_price = order.get('stop_price')
                 stop_parent_id = order.get('stop_parent_order_id')
                 
@@ -490,7 +490,7 @@ class PositionManager:
                 else:
                     main_orders.append(order)
             
-            # Atualizar contadores SOMENTE com ordens principais DO SÍMBOLO ATUAL
+            # Update counters ONLY with main orders for CURRENT SYMBOL
             self.open_orders.clear()
             
             for order in main_orders:
@@ -502,33 +502,33 @@ class PositionManager:
                     'side': order.get('side', ''),
                     'symbol': order.get('symbol', ''),
                     'timestamp': datetime.now().isoformat(),
-                    'margin': 0,  # Será calculado se necessário
-                    'value': 0    # Será calculado se necessário
+                    'margin': 0,  # Will be calculated if needed
+                    'value': 0    # Will be calculated if needed
                 }
             
-            # Log da sincronização
+            # Sync log
             total_api_orders = len(real_open_orders)
             total_symbol_orders = len(symbol_filtered_orders)
             other_symbols_orders = len(other_symbol_orders)
             main_count = len(main_orders)
             tp_sl_count = len(tp_sl_orders)
             
-            self.logger.info(f"🔄 Sincronização concluída:")
-            self.logger.info(f"   Total API: {total_api_orders} ordens")
-            self.logger.info(f"   {current_symbol}: {total_symbol_orders} ordens")
-            self.logger.info(f"   Outros símbolos: {other_symbols_orders} ordens (IGNORADAS)")
-            self.logger.info(f"   {current_symbol} principais: {main_count} ordens")
-            self.logger.info(f"   {current_symbol} TP/SL: {tp_sl_count} ordens")
-            self.logger.info(f"   Contadas para limite MAX_OPEN_ORDERS: {main_count}")
+            self.logger.info(f"🔄 Synchronization complete:")
+            self.logger.info(f"   Total API: {total_api_orders} orders")
+            self.logger.info(f"   {current_symbol}: {total_symbol_orders} orders")
+            self.logger.info(f"   Other symbols: {other_symbols_orders} orders (IGNORED)")
+            self.logger.info(f"   {current_symbol} main: {main_count} orders")
+            self.logger.info(f"   {current_symbol} TP/SL: {tp_sl_count} orders")
+            self.logger.info(f"   Counted for MAX_OPEN_ORDERS limit: {main_count}")
             
-            # Atualizar margem se necessário
+            # Update margin if needed
             self._recalculate_margin_from_orders()
             
         except Exception as e:
-            self.logger.error(f"❌ Erro na sincronização: {e}")
+            self.logger.error(f"❌ Synchronization error: {e}")
 
     def _recalculate_margin_from_orders(self):
-        """ Recalcula margem baseado nas ordens principais atuais"""
+        """Recalculates margin based on current main orders"""
         
         total_margin = 0
         
@@ -541,21 +541,21 @@ class PositionManager:
                 margin = order_value / self.leverage
                 total_margin += margin
                 
-                # Atualizar dados da ordem
+                # Update order data
                 order_data['value'] = order_value
                 order_data['margin'] = margin
         
-        # ⚠️ NÃO sobrescrever margin_used da API - ela inclui posições + ordens
-        # self.margin_used já foi atualizada pela API em update_account_state()
-        # total_margin aqui são apenas as ordens, não as posições abertas
+        # ⚠️ DO NOT overwrite margin_used from API - it includes positions + orders
+        # self.margin_used is already updated by the API in update_account_state()
+        # total_margin here is only for orders, not open positions
         
         # Manter margem disponível como está da API
         # self.margin_available já foi atualizada pela API em update_account_state()
         
-        self.logger.debug(f"💰 Margem recalculada: ${total_margin:.2f}")
+        self.logger.debug(f"💰 Recalculated margin: ${total_margin:.2f}")
 
     def can_place_order(self, order_value: float, symbol: Optional[str] = None) -> Tuple[bool, str]:
-        """Verifica se pode colocar uma nova ordem COM CORREÇÃO"""
+        """Checks if a new order can be placed WITH CORRECTION"""
         
         #  Sincronizar com API antes da verificação
         if hasattr(self, '_last_sync_time'):
@@ -567,36 +567,36 @@ class PositionManager:
         
         self._last_sync_time = time.time()
         
-        # Calcular margem necessária
+        # Calculate required margin
         margin_needed = order_value / self.leverage
         
-        # Verificar margem disponível
+        # Check available margin
         if margin_needed > self.margin_available:
-            return False, f"Margem insuficiente: precisa ${margin_needed:.2f}, disponível ${self.margin_available:.2f}"
+            return False, f"Insufficient margin: needs ${margin_needed:.2f}, available ${self.margin_available:.2f}"
         
-        # 🔧 SEGUNDA CORREÇÃO: Contar APENAS ordens principais
-        main_orders_count = len(self.open_orders)  # Agora já filtrado na sincronização
+        # 🔧 SECOND FIX: Count ONLY main orders
+        main_orders_count = len(self.open_orders)  # Already filtered in sync
         
-        # Verificar número máximo de ordens
+        # Check maximum number of orders
         if main_orders_count >= self.max_open_orders:
-            return False, f"Máximo de ordens atingido: {main_orders_count}/{self.max_open_orders}"
+            return False, f"Maximum orders reached: {main_orders_count}/{self.max_open_orders}"
 
-        # Verificar posição máxima
+        # Check maximum position
         current_exposure = self.get_current_exposure(symbol if 'symbol' in locals() else None)
         projected_exposure = current_exposure + order_value
 
         if projected_exposure > self.max_position_size:
             return False, (
-                f"Exposição máxima excedida: "
+                f"Maximum exposure exceeded: "
                 f"${projected_exposure:.2f} > ${self.max_position_size:.2f} "
-                f"(atual: ${current_exposure:.2f} + nova: ${order_value:.2f})"
+                f"(current: ${current_exposure:.2f} + new: ${order_value:.2f})"
             )
 
         # ✅ Pode colocar ordem
         self.logger.debug(
-            f"✅ Ordem permitida: "
-            f"exposição atual ${current_exposure:.2f} + "
-            f"nova ${order_value:.2f} = "
+            f"✅ Order allowed: "
+            f"exposure current ${current_exposure:.2f} + "
+            f"new ${order_value:.2f} = "
             f"${projected_exposure:.2f} < ${self.max_position_size:.2f}"
         )
         
@@ -1018,9 +1018,9 @@ class PositionManager:
             # Aqui você chamaria a API para cancelar de fato
             # self.auth.cancel_order(order_id)
 
-    # Função completamente nova para estatísticas
+    # New function for trade statistics
     def get_trade_summary(self) -> Dict:
-        """Retorna resumo dos trades realizados"""
+        """Returns a summary of executed trades"""
         
         total_pnl = 0
         trade_count = 0

@@ -1,7 +1,7 @@
 """
-Pacifica API - Sistema de Autenticação com AGENT WALLET (SEM PRIVATE KEY)
-Baseado no método funcional do test_agent_wallet_withoutkey.py
-🔒 SEGURANÇA: Não requer mais private key da wallet principal
+Pacifica API - Authentication System with AGENT WALLET (NO PRIVATE KEY)
+Based on the functional method from test_agent_wallet_withoutkey.py
+🔒 SECURITY: No longer requires main wallet private key
 """
 
 import os
@@ -18,15 +18,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 from solders.keypair import Keypair
 
-# Carregar variáveis de ambiente
+# Load environment variables
 load_dotenv()
 
 # ============================================================================
-# FUNÇÕES AUXILIARES DE ASSINATURA PARA AGENT WALLET
+# HELPER FUNCTIONS FOR AGENT WALLET SIGNATURE
 # ============================================================================
 
 def sort_json_keys(value):
-    """Ordena as chaves JSON recursivamente"""
+    """Sorts JSON keys recursively"""
     if isinstance(value, dict):
         return {k: sort_json_keys(value[k]) for k in sorted(value.keys())}
     elif isinstance(value, list):
@@ -35,7 +35,7 @@ def sort_json_keys(value):
         return value
 
 def prepare_message(header, payload):
-    """Prepara a mensagem para assinatura"""
+    """Prepares the message for signing"""
     if not all(k in header for k in ("type", "timestamp", "expiry_window")):
         raise ValueError("Header must have type, timestamp, and expiry_window")
     data = {**header, "data": payload}
@@ -43,7 +43,7 @@ def prepare_message(header, payload):
     return json.dumps(sorted_data, separators=(",", ":"))
 
 def sign_message(message: str, keypair: Keypair) -> str:
-    """Assina a mensagem usando a chave privada do agent"""
+    """Signs the message using the agent's private key"""
     signature = keypair.sign_message(message.encode("utf-8"))
     return base58.b58encode(bytes(signature)).decode("utf-8")
 
@@ -103,44 +103,52 @@ def setup_logging() -> logging.Logger:
     return logger
 
 # ============================================================================
-# CLASSE DE AUTENTICAÇÃO COM AGENT WALLET
+# AGENT WALLET AUTHENTICATION CLASS
 # ============================================================================
 
 class PacificaAuth:
+    """
+    Handles authentication and API communication with Pacifica exchange using Agent Wallet.
+    
+    🔒 SECURITY: Uses Agent Wallet for signing operations, eliminating the need to expose
+    the main wallet's private key.
+    """
+    
     def __init__(self):
+        """Initialize the PacificaAuth with Agent Wallet configuration."""
         self.logger = setup_logging()
         self.debug_logger = logging.getLogger('PacificaBot.Debug')
 
         self.base_url = os.getenv('API_ADDRESS', 'https://api.pacifica.fi/api/v1')
         self.ws_url = os.getenv('WS_BASE_URL', 'wss://ws.pacifica.fi/ws')
 
-        # 🔒 CONFIGURAR AGENT WALLET (para assinatura)
+        # 🔒 SETUP AGENT WALLET (for signing)
         self.setup_agent_wallet()
         
-        # 🔒 CONFIGURAR MAIN WALLET (apenas public key)
+        # 🔒 SETUP MAIN WALLET (public key only)
         self.setup_main_wallet()
 
-        # 🆕 CACHE DE HISTÓRICO COM TIMESTAMP
+        # 🆕 TIMESTAMP-BASED CACHE
         self._historical_cache = {}
-        self._cache_ttl_seconds = 90  # Cache válido por 90 segundos (1.5 min)
+        self._cache_ttl_seconds = 90  # Cache valid for 90 seconds (1.5 min)
         
-        # 🆕 RATE LIMIT PROTECTION - Controle global de requisições
+        # 🆕 RATE LIMIT PROTECTION - Global request control
         self._last_kline_request_time = 0
-        self._min_kline_delay_seconds = 1.2  # Mínimo 1.2s entre requisições ao /kline
+        self._min_kline_delay_seconds = 1.2  # Minimum 1.2s between /kline requests
         
-        # 🆕 CIRCUIT BREAKER - Detecção de API sobrecarregada
+        # 🆕 CIRCUIT BREAKER - Overloaded API detection
         self._consecutive_errors = 0
         self._max_consecutive_errors = 3
         self._backoff_multiplier = 1.0
         self._max_backoff_multiplier = 4.0
 
-        self.logger.info("✅ PacificaAuth inicializado com Agent Wallet (SEGURO)")
+        self.logger.info("✅ PacificaAuth initialized with Agent Wallet (SECURE)")
 
     def setup_agent_wallet(self):
-        """Configura Agent Wallet para assinatura (SEM expor private key principal)"""
+        """Configures Agent Wallet for signing (WITHOUT exposing main private key)"""
         key_b58 = os.getenv("AGENT_PRIVATE_KEY_B58") or os.getenv("AGENT_PRIVATE_KEY")
         if not key_b58:
-            raise ValueError("🔑 Defina AGENT_PRIVATE_KEY_B58 no .env")
+            raise ValueError("🔑 AGENT_PRIVATE_KEY_B58 not found in .env")
         
         try:
             raw = base58.b58decode(key_b58)
@@ -149,22 +157,22 @@ class PacificaAuth:
             elif len(raw) == 64:
                 self.agent_keypair = Keypair.from_bytes(raw)
             else:
-                raise ValueError(f"❌ Tamanho inválido da chave agent (len={len(raw)})")
+                raise ValueError(f"❌ Invalid agent key length (len={len(raw)})")
             
             self.agent_public_key = str(self.agent_keypair.pubkey())
-            self.logger.info(f"✅ Agent Wallet configurado: {self.agent_public_key}")
+            self.logger.info(f"✅ Agent Wallet configured: {self.agent_public_key}")
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao configurar Agent Wallet: {e}")
+            self.logger.error(f"❌ Error setting up Agent Wallet: {e}")
             raise
 
     def setup_main_wallet(self):
-        """Configura Main Wallet (apenas public key - SEM private key)"""
+        """Configures Main Wallet (public key only - NO private key)"""
         self.main_public_key = os.getenv("MAIN_PUBLIC_KEY")
         if not self.main_public_key:
-            raise ValueError("🔑 Defina MAIN_PUBLIC_KEY no .env")
+            raise ValueError("🔑 MAIN_PUBLIC_KEY not found in .env")
         
-        # Para compatibilidade com código existente
+        # For backward compatibility with existing code
         self.public_key = self.main_public_key
         self.wallet_address = self.main_public_key
         
@@ -174,17 +182,30 @@ class PacificaAuth:
                      order_type: str = "GTC", reduce_only: bool = False,
                      take_profit: Dict = None, stop_loss: Dict = None) -> Optional[Dict]:
         """
-        Cria uma ordem com TP/SL opcionais usando Agent Wallet
-        🔒 SEGURO: Não requer private key da wallet principal
+        Creates an order with optional TP/SL using Agent Wallet
+        🔒 SECURE: Does not require main wallet private key
+        
+        Args:
+            symbol: Trading pair symbol (e.g., 'BTC-PERP')
+            side: 'buy' or 'sell'
+            amount: Order size (as string to preserve precision)
+            price: Order price (as string to preserve precision)
+            order_type: Order type (default: 'GTC' - Good Till Cancelled)
+            reduce_only: If True, order will only reduce position
+            take_profit: Optional dict with 'price' and 'amount' for take profit
+            stop_loss: Optional dict with 'price' and 'amount' for stop loss
+            
+        Returns:
+            Dict with order details or error information
         """
-        # Validação: não criar ordem com quantidade zero ou negativa
+        # Validation: don't create order with zero or negative amount
         try:
             amount_float = float(amount)
         except Exception:
             amount_float = 0.0
         if amount_float <= 0:
-            self.logger.warning(f"⚠️ Ordem não criada: quantidade inválida ({amount})")
-            return {'success': False, 'error': f'Quantidade da ordem é muito baixa: {amount}', 'code': 0}
+            self.logger.warning(f"⚠️ Order not created: invalid amount ({amount})")
+            return {'success': False, 'error': f'Order amount is too low: {amount}', 'code': 0}
         
         timestamp = int(time.time() * 1_000)
         
@@ -276,13 +297,13 @@ class PacificaAuth:
                     self.debug_logger.debug(json.dumps(data, indent=2))
                     return data
                 except json.JSONDecodeError:
-                    self.logger.error("❌ Falha ao decodificar JSON da resposta")
+                    self.logger.error("❌ Failed to decode JSON response")
             else:
-                self.logger.error(f"❌ Falha ao criar ordem - Status: {response.status_code}")
+                self.logger.error(f"❌ Failed to create order - Status: {response.status_code}")
                 self.logger.error(f"Response: {response.text}")
 
         except Exception as e:
-            self.logger.error(f"❌ Erro na requisição: {e}")
+            self.logger.error(f"❌ Request error: {e}")
             self.debug_logger.error(traceback.format_exc())
 
         return None
@@ -291,26 +312,26 @@ class PacificaAuth:
                                    tp_percent: float = None, sl_percent: float = None,
                                    order_type: str = "GTC", reduce_only: bool = False) -> Optional[Dict]:
         """
-        Cria ordem com TP/SL calculados automaticamente usando Agent Wallet
-        🔒 SEGURO: Não requer private key da wallet principal
+        Creates an order with automatically calculated TP/SL using Agent Wallet
+        🔒 SECURE: Does not require main wallet private key
         """
         
         entry_price = float(price)
         take_profit = None
         stop_loss = None
         
-        # 🆕 OBTER TICK_SIZE DO SÍMBOLO
+        # 🆕 GET TICK_SIZE FOR SYMBOL
         tick_size = self._get_tick_size(symbol)
         
         if tp_percent:
-            if side == 'bid':  # Comprando - TP acima do preço
+            if side == 'bid':  # Buying - TP above price
                 tp_stop = entry_price * (1 + tp_percent / 100)
                 tp_limit = tp_stop * 0.999
-            else:  # Vendendo - TP abaixo do preço
+            else:  # Selling - TP below price
                 tp_stop = entry_price * (1 - tp_percent / 100)
                 tp_limit = tp_stop * 1.001
             
-            # 🔧 ARREDONDAR PARA TICK_SIZE
+            # 🔧 ROUND TO TICK_SIZE
             tp_stop_rounded = self._round_to_tick_size(tp_stop, tick_size)
             tp_limit_rounded = self._round_to_tick_size(tp_limit, tick_size)
                 
@@ -319,17 +340,17 @@ class PacificaAuth:
                 "limit_price": f"{tp_limit_rounded}"
             }
             
-            self.logger.debug(f"🎯 TP calculado: {tp_stop:.6f} -> {tp_stop_rounded} (tick_size: {tick_size})")
+            self.logger.debug(f"🎯 TP calculated: {tp_stop:.6f} -> {tp_stop_rounded} (tick_size: {tick_size})")
         
         if sl_percent:
-            if side == 'bid':  # Comprando - SL abaixo do preço
+            if side == 'bid':  # Buying - SL below price
                 sl_stop = entry_price * (1 - sl_percent / 100)
                 sl_limit = sl_stop * 0.999
-            else:  # Vendendo - SL acima do preço
+            else:  # Selling - SL above price
                 sl_stop = entry_price * (1 + sl_percent / 100)
                 sl_limit = sl_stop * 1.001
             
-            # 🔧 ARREDONDAR PARA TICK_SIZE
+            # 🔧 ROUND TO TICK_SIZE
             sl_stop_rounded = self._round_to_tick_size(sl_stop, tick_size)
             sl_limit_rounded = self._round_to_tick_size(sl_limit, tick_size)
                 
@@ -338,7 +359,7 @@ class PacificaAuth:
                 "limit_price": f"{sl_limit_rounded}"
             }
             
-            self.logger.debug(f"🛡️ SL calculado: {sl_stop:.6f} -> {sl_stop_rounded} (tick_size: {tick_size})")
+            self.logger.debug(f"🛡️ SL calculated: {sl_stop:.6f} -> {sl_stop_rounded} (tick_size: {tick_size})")
         
         return self.create_order(
             symbol=symbol,
@@ -353,16 +374,16 @@ class PacificaAuth:
 
     def cancel_order(self, order_id: str, symbol: str = None) -> dict:
         """
-        Cancela uma ordem específica seguindo a documentação oficial exata
+        Cancels a specific order following the exact official documentation
         """
         
         timestamp = int(time.time() * 1_000)
         
-        # Usar símbolo padrão se não fornecido
+        # Use default symbol if not provided
         if not symbol:
             symbol = os.getenv('SYMBOL', 'BTC')
         
-        # Criar payload exatamente como na documentação
+        # Create payload exactly as per documentation
         signature_header = {
             "timestamp": timestamp,
             "expiry_window": 30000,
@@ -371,27 +392,27 @@ class PacificaAuth:
         
         signature_payload = {
             "symbol": symbol,
-            "order_id": int(order_id)  # API espera integer
+            "order_id": int(order_id)  # API expects integer
         }
         
-        # 🔒 ASSINATURA COM AGENT WALLET
+        # 🔒 SIGN WITH AGENT WALLET
         message = prepare_message(signature_header, signature_payload)
         signature = sign_message(message, self.agent_keypair)
         
-        # 🔒 REQUEST EXATAMENTE COMO DOCUMENTAÇÃO
-        # 🔒 REQUEST SEGUINDO MESMO FORMATO DO create_order
+        # 🔒 REQUEST EXACTLY AS PER DOCUMENTATION
+        # 🔒 REQUEST FOLLOWING SAME FORMAT AS create_order
         payload = {
             "account": self.main_public_key,           # 🔒 Main wallet (public)
-            "agent_wallet": self.agent_public_key,    # 🔒 Agent wallet (public) - ESTAVA FALTANDO!
-            "signature": signature,                   # 🔒 Assinado pelo agent
+            "agent_wallet": self.agent_public_key,    # 🔒 Agent wallet (public) - WAS MISSING!
+            "signature": signature,                   # 🔒 Signed by agent
             "timestamp": timestamp,
-            "expiry_window": 30000,                   # 🔒 Expiry window - ESTAVA FALTANDO!
+            "expiry_window": 30000,                   # 🔒 Expiry window - WAS MISSING!
             "symbol": symbol,
-            "order_id": int(order_id)  # Como integer conforme documentação
+            "order_id": int(order_id)  # As integer per documentation
         }
         
-        # 🔧 DEBUG: Log do payload para análise
-        self.logger.debug(f"📤 Payload de cancelamento: {payload}")
+        # 🔧 DEBUG: Log payload for analysis
+        self.logger.debug(f"📤 Cancellation payload: {payload}")
         
         try:
             url = f"{self.base_url}/orders/cancel"
@@ -407,17 +428,17 @@ class PacificaAuth:
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    self.logger.info(f"✅ Ordem {order_id} cancelada")
+                    self.logger.info(f"✅ Order {order_id} cancelled")
                     return {"success": True, "data": data}
                 except ValueError:
-                    # Se não conseguir fazer parse do JSON, mas status é 200
-                    self.logger.info(f"✅ Ordem {order_id} cancelada (sem JSON response)")
+                    # If can't parse JSON but status is 200
+                    self.logger.info(f"✅ Order {order_id} cancelled (no JSON response)")
                     return {"success": True, "data": None}
             else:
                 error_text = response.text
-                self.logger.error(f"❌ Falha ao cancelar {order_id}: {error_text}")
+                self.logger.error(f"❌ Failed to cancel {order_id}: {error_text}")
                 
-                # Log detalhado do erro para debug
+                # Detailed error logging for debug
                 self.logger.debug(f"🔧 Response headers: {dict(response.headers)}")
                 self.logger.debug(f"🔧 Request URL: {url}")
                 

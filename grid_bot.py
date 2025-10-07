@@ -1,6 +1,6 @@
 """
-Pacifica Grid Trading Bot - Sistema Principal
-Executa estratégias de Grid Trading (Pure Grid e Market Making)
+Pacifica Grid Trading Bot - Main System
+Implements Grid Trading strategies (Pure Grid and Market Making)
 """
 
 import os
@@ -27,55 +27,55 @@ from src.grid_risk_manager import GridRiskManager
 
 class GridTradingBot:
     def __init__(self):
-        # Carregar configurações
+        # Load configurations
         load_dotenv()
         
-        # Determinar tipo de estratégia - APENAS UMA VARIÁVEL: STRATEGY_TYPE
+        # Determine strategy type - ONLY ONE VARIABLE: STRATEGY_TYPE
         strategy_type_env = os.getenv('STRATEGY_TYPE', 'market_making').lower()
         
-        # Mapear todas as estratégias via STRATEGY_TYPE
+        # Map all strategies via STRATEGY_TYPE
         if strategy_type_env == 'multi_asset':
             self.strategy_type = 'multi_asset'
         elif strategy_type_env == 'multi_asset_enhanced':
             self.strategy_type = 'multi_asset_enhanced'
         elif strategy_type_env in ['pure_grid', 'market_making', 'dynamic_grid']:
             self.strategy_type = 'grid'
-            self.grid_type = strategy_type_env  # Salvar tipo específico do grid
+            self.grid_type = strategy_type_env  # Save specific grid type
         else:
-            # Fallback para market_making se valor inválido
+            # Fallback to market_making if invalid value
             self.strategy_type = 'grid'
             self.grid_type = 'market_making'
         
-        # Setup logging
+        # Set up logging
         self.setup_logging()
         
-        # Criar logger específico da estratégia
+        # Create strategy-specific logger
         self.logger = create_strategy_logger('PacificaBot.Main', self.strategy_type)
         
-        # Estado do bot
+        # Bot state
         self.running = False
         self.start_time = None
         
-        # Configurações
+        # Settings
         self.symbol = os.getenv('SYMBOL', 'BTC')
         self.rebalance_interval = int(os.getenv('REBALANCE_INTERVAL_SECONDS', '60'))
         self.check_balance = os.getenv('CHECK_BALANCE_BEFORE_ORDER', 'true').lower() == 'true'
         
-        # ✨ NOVA FUNCIONALIDADE: Reset periódico do grid
+        # ✨ NEW FEATURE: Periodic grid reset
         self.enable_periodic_reset = os.getenv('ENABLE_PERIODIC_GRID_RESET', 'false').lower() == 'true'
-        self.grid_reset_interval = int(os.getenv('GRID_RESET_INTERVAL_MINUTES', '60')) * 60  # Converter para segundos
+        self.grid_reset_interval = int(os.getenv('GRID_RESET_INTERVAL_MINUTES', '60')) * 60  # Convert to seconds
 
-        # Configurações de controle de sessão
+        # Session control settings
         self.session_stop_loss = float(os.getenv('SESSION_STOP_LOSS_USD', '100'))
         self.session_take_profit = float(os.getenv('SESSION_TAKE_PROFIT_USD', '200'))
         self.session_max_loss = float(os.getenv('SESSION_MAX_LOSS_USD', '150'))
         
-        # Estado da sessão
+        # Session state
         self.session_start_balance = 0.0
         self.session_realized_pnl = 0.0
         self.is_paused = False
 
-        # Declarar componentes como None - serão inicializados em initialize_components()
+        # Declare components as None - will be initialized in initialize_components()
         self.auth = None
         self.calculator = None
         self.position_mgr = None
@@ -83,12 +83,12 @@ class GridTradingBot:
         self.risk_manager = None
         self.strategy = None
 
-        # Setup signal handlers para shutdown gracioso
+        # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
     
     def show_strategy_header(self):
-        """Mostrar cabeçalho específico da estratégia"""
+        """Show strategy-specific header"""
         
         self.logger.info("=" * 80, force=True)
         self.logger.info("🤖 PACIFICA TRADING BOT", force=True)
@@ -97,43 +97,43 @@ class GridTradingBot:
         if self.strategy_type == 'grid':
             grid_type = getattr(self, 'grid_type', 'market_making').upper()
             if grid_type == 'DYNAMIC_GRID':
-                self.logger.info(f"Estratégia: 🎯 DYNAMIC GRID TRADING", force=True)
-                # Mostrar configurações específicas do Dynamic Grid
+                self.logger.info(f"Strategy: 🎯 DYNAMIC GRID TRADING", force=True)
+                # Show Dynamic Grid specific settings
                 threshold = os.getenv('DYNAMIC_THRESHOLD_PERCENT', '1.0')
                 max_distance = os.getenv('MAX_ADJUSTMENT_DISTANCE_PERCENT', '5.0')
-                self.logger.info(f"Threshold de Ajuste: {threshold}%", force=True)
-                self.logger.info(f"Distância Máxima: {max_distance}%", force=True)
+                self.logger.info(f"Adjustment Threshold: {threshold}%", force=True)
+                self.logger.info(f"Maximum Distance: {max_distance}%", force=True)
             else:
-                self.logger.info(f"Estratégia: GRID TRADING ({grid_type})", force=True)
-            self.logger.info(f"Símbolo: {self.symbol}", force=True)
+                self.logger.info(f"Strategy: GRID TRADING ({grid_type})", force=True)
+            self.logger.info(f"Symbol: {self.symbol}", force=True)
         elif self.strategy_type == 'multi_asset_enhanced':
-            self.logger.info(f"Estratégia: 🧠 ENHANCED MULTI-ASSET", force=True)
+            self.logger.info(f"Strategy: 🧠 ENHANCED MULTI-ASSET", force=True)
             symbols = os.getenv('SYMBOLS', 'BTC,ETH,SOL')
             quality = os.getenv('ENHANCED_MIN_SIGNAL_QUALITY', '65')
             confidence = os.getenv('ENHANCED_MIN_CONFIDENCE', '75')
-            self.logger.info(f"Símbolos: {symbols}", force=True)
-            self.logger.info(f"Algoritmo: Quality≥{quality}, Confidence≥{confidence}", force=True)
+            self.logger.info(f"Symbols: {symbols}", force=True)
+            self.logger.info(f"Algorithm: Quality≥{quality}, Confidence≥{confidence}", force=True)
         else:  # multi_asset
-            self.logger.info(f"Estratégia: MULTI-ASSET SCALPING", force=True)
+            self.logger.info(f"Strategy: MULTI-ASSET SCALPING", force=True)
             symbols = os.getenv('SYMBOLS', 'BTC,ETH,SOL')
-            self.logger.info(f"Símbolos: {symbols}", force=True)
+            self.logger.info(f"Symbols: {symbols}", force=True)
             
-        self.logger.info(f"Intervalo de Rebalanceamento: {self.rebalance_interval}s", force=True)
+        self.logger.info(f"Rebalancing Interval: {self.rebalance_interval}s", force=True)
         
-        # ✨ Mostrar configuração de reset periódico
+        # ✨ Show periodic reset configuration
         if self.enable_periodic_reset:
             reset_minutes = self.grid_reset_interval // 60
-            self.logger.info(f"🔄 Reset Periódico: A cada {reset_minutes} minutos", force=True)
+            self.logger.info(f"🔄 Periodic Reset: Every {reset_minutes} minutes", force=True)
         else:
-            self.logger.info("🔄 Reset Periódico: Desabilitado", force=True)
+            self.logger.info("🔄 Periodic Reset: Disabled", force=True)
             
         self.logger.info("=" * 80, force=True)
         
-        # 🔧 SISTEMA DE VALIDAÇÕES (NOVO)
+        # 🔧 VALIDATION SYSTEM (NEW)
         self._run_config_validations()
          
     def setup_logging(self):
-        """Configura sistema de logging"""
+        """Configure logging system"""
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
         
@@ -165,60 +165,60 @@ class GridTradingBot:
         root_logger.addHandler(console_handler)
     
     def _run_config_validations(self):
-        """Executa validações de configuração sem afetar funcionalidade principal"""
+        """Run configuration validations without affecting main functionality"""
         try:
             from src.config_validator import run_all_validations
             
-            self.logger.info("🔧 Executando validações de configuração...")
+            self.logger.info("🔧 Running configuration validations...")
             validation_result = run_all_validations(self.strategy_type)
             
             if validation_result['warnings']:
-                self.logger.warning("⚠️ AVISOS DE CONFIGURAÇÃO:")
+                self.logger.warning("⚠️ CONFIGURATION WARNINGS:")
                 for warning in validation_result['warnings']:
                     self.logger.warning(f"  • {warning}")
                     
             if validation_result['errors']:
-                self.logger.error("❌ PROBLEMAS CRÍTICOS DE CONFIGURAÇÃO:")
+                self.logger.error("❌ CRITICAL CONFIGURATION ISSUES:")
                 for error in validation_result['errors']:
                     self.logger.error(f"  • {error}")
-                self.logger.error("⚠️ Bot pode não funcionar corretamente - verifique as configurações acima")
+                self.logger.error("⚠️ Bot may not work correctly - please check the settings above")
             else:
-                self.logger.info("✅ Todas as validações passaram com sucesso")
+                self.logger.info("✅ All validations passed successfully")
                 
         except ImportError:
-            self.logger.debug("📋 Config validator não encontrado, pulando validações")
+            self.logger.debug("📋 Config validator not found, skipping validations")
         except Exception as e:
-            self.logger.debug(f"⚠️ Erro durante validações: {e}")
+            self.logger.debug(f"⚠️ Error during validations: {e}")
     
     def initialize_components(self) -> bool:
-        """Inicializa todos os componentes do bot"""
+        """Initialize all bot components"""
         
         try:
-            self.logger.info("🔧 Inicializando componentes...")
+            self.logger.info("🔧 Initializing components...")
             
-            # 1. Autenticação
+            # 1. Authentication
             self.auth = PacificaAuth()
-            self.logger.info("✅ Auth Client inicializado")
+            self.logger.info("✅ Auth Client initialized")
 
-            # 2. Telegram Notifier (antes do Risk Manager)
+            # 2. Telegram Notifier (before Risk Manager)
             self.telegram = TelegramNotifier()
-            self.logger.info("✅ Telegram Notifier inicializado")
+            self.logger.info("✅ Telegram Notifier initialized")
 
-            # 3. Limpar ordens antigas (se configurado)
+            # 3. Clean up old orders (if configured)
             clean_on_start = os.getenv('CLEAN_ORDERS_ON_START', 'false').lower() == 'true'
             if clean_on_start:
-                self.logger.warning("🧹 Limpando ordens antigas...")
+                self.logger.warning("🧹 Cleaning up old orders...")
                 self._clean_old_orders()
             
-            # 4. Grid Calculator (COM auth para buscar market info)
+            # 4. Grid Calculator (with auth to fetch market info)
             self.calculator = GridCalculator(auth_client=self.auth)
-            self.logger.info("✅ Grid Calculator inicializado")
+            self.logger.info("✅ Grid Calculator initialized")
             
             # 5. Position Manager
             self.position_mgr = PositionManager(self.auth)
-            self.logger.info("✅ Position Manager inicializado")
+            self.logger.info("✅ Position Manager initialized")
 
-            # 6. Grid Risk Manager (apenas para estratégias grid)
+            # 6. Grid Risk Manager (only for grid strategies)
             self.risk_manager = None
             if self.strategy_type == 'grid':
                 self.risk_manager = GridRiskManager(
@@ -227,56 +227,56 @@ class GridTradingBot:
                     telegram_notifier=self.telegram,
                     logger=self.logger
                 )
-                self.logger.info("✅ Grid Risk Manager inicializado")
+                self.logger.info("✅ Grid Risk Manager initialized")
             
-            # 7. Inicializar strategy baseada no tipo configurado
+            # 7. Initialize strategy based on configured type
             if self.strategy_type == 'multi_asset':
-                self.logger.info("🎯 Inicializando estratégia Multi-Asset Scalping...")
+                self.logger.info("🎯 Initializing Multi-Asset Scalping strategy...")
                 self.strategy = MultiAssetStrategy(self.auth, self.calculator, self.position_mgr)
             elif self.strategy_type == 'multi_asset_enhanced':
-                self.logger.info("🧠 Inicializando estratégia Enhanced Multi-Asset...")
+                self.logger.info("🧠 Initializing Enhanced Multi-Asset strategy...")
                 self.strategy = MultiAssetEnhancedStrategy(self.auth, self.calculator, self.position_mgr)
             else:
-                # Verificar se deve usar estratégia dinâmica
+                # Check if should use dynamic strategy
                 if hasattr(self, 'grid_type') and self.grid_type == 'dynamic_grid':
-                    self.logger.info("🎯 Inicializando estratégia Dynamic Grid Trading...")
+                    self.logger.info("🎯 Initializing Dynamic Grid Trading strategy...")
                     self.strategy = DynamicGridStrategy(self.auth, self.calculator, self.position_mgr)
                 else:
-                    self.logger.info("📊 Inicializando estratégia Grid Trading...")
+                    self.logger.info("📊 Initializing Grid Trading strategy...")
                     self.strategy = GridStrategy(self.auth, self.calculator, self.position_mgr)
             
-            self.logger.info("✅ Componentes inicializados com sucesso")
+            self.logger.info("✅ Components initialized successfully")
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao inicializar componentes: {e}")
+            self.logger.error(f"❌ Error initializing components: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
             return False
     
     def _clean_old_orders(self):
-        """Cancela todas as ordens abertas do símbolo com verificação robusta"""
+        """Cancel all open orders for the symbol with robust verification"""
         try:
-            self.logger.info(f"🔍 Verificando ordens existentes para {self.symbol}...")
+            self.logger.info(f"🔍 Checking existing orders for {self.symbol}...")
             
-            # Buscar todas as ordens abertas
+            # Fetch all open orders
             all_open_orders = self.auth.get_open_orders()
             
             if not all_open_orders:
-                self.logger.info("ℹ️ Nenhuma ordem encontrada na conta")
+                self.logger.info("ℹ️ No orders found in the account")
                 return
             
-            # Filtrar ordens do símbolo específico
+            # Filter orders for the specific symbol
             symbol_orders = []
             for order in all_open_orders:
                 if order.get('symbol') == self.symbol:
                     symbol_orders.append(order)
             
             if not symbol_orders:
-                self.logger.info(f"ℹ️ Nenhuma ordem encontrada para {self.symbol}")
+                self.logger.info(f"ℹ️ No orders found for {self.symbol}")
                 return
             
-            self.logger.info(f"🚫 Cancelando {len(symbol_orders)} ordens de {self.symbol}...")
+            self.logger.info(f"🚫 Canceling {len(symbol_orders)} orders for {self.symbol}...")
             
             cancelled_count = 0
             failed_count = 0
@@ -289,231 +289,231 @@ class GridTradingBot:
                 
                 if order_id:
                     try:
-                        self.logger.debug(f"   Cancelando: {side} @ {price} (ID: {order_id})")
+                        self.logger.debug(f"   Canceling: {side} @ {price} (ID: {order_id})")
                         
-                        # Passar o símbolo para o cancelamento
+                        # Pass the symbol for cancellation
                         result = self.auth.cancel_order(str(order_id), self.symbol)
                         
                         if result and result.get('success'):
                             cancelled_count += 1
-                            self.logger.debug(f"   ✅ Cancelada: {order_id}")
+                            self.logger.debug(f"   ✅ Canceled: {order_id}")
                         else:
                             failed_count += 1
-                            error_msg = result.get('error', 'Erro desconhecido') if result else 'Sem resposta'
-                            self.logger.warning(f"   ⚠️ Falha ao cancelar {order_id}: {error_msg}")
+                            error_msg = result.get('error', 'Unknown error') if result else 'No response'
+                            self.logger.warning(f"   ⚠️ Failed to cancel {order_id}: {error_msg}")
                         
-                        time.sleep(0.15)  # Delay entre cancelamentos para evitar rate limit
+                        time.sleep(0.15)  # Delay between cancellations to avoid rate limiting
                         
                     except Exception as cancel_error:
                         failed_count += 1
-                        self.logger.error(f"   ❌ Erro ao cancelar {order_id}: {cancel_error}")
+                        self.logger.error(f"   ❌ Error canceling {order_id}: {cancel_error}")
                 else:
-                    self.logger.warning(f"   ⚠️ Ordem sem ID válido: {order}")
+                    self.logger.warning(f"   ⚠️ Order without valid ID: {order}")
             
-            # Aguardar processamento dos cancelamentos
+            # Wait for cancellations to process
             if cancelled_count > 0:
-                self.logger.info(f"⏳ Aguardando processamento dos cancelamentos...")
+                self.logger.info(f"⏳ Processing cancellations...")
                 time.sleep(2.0)
                 
-                # Verificar se realmente foram canceladas
+                # Verify if orders were actually canceled
                 remaining_orders = self.auth.get_open_orders(self.symbol)
                 remaining_count = len(remaining_orders) if remaining_orders else 0
                 
                 if remaining_count == 0:
-                    self.logger.info(f"✅ Todas as {cancelled_count} ordens foram canceladas com sucesso")
+                    self.logger.info(f"✅ Successfully canceled all {cancelled_count} orders")
                 else:
-                    self.logger.warning(f"⚠️ Ainda restam {remaining_count} ordens após cancelamento")
+                    self.logger.warning(f"⚠️ {remaining_count} orders still remain after cancellation")
             
             if failed_count > 0:
-                self.logger.warning(f"⚠️ {failed_count} ordens falharam no cancelamento")
+                self.logger.warning(f"⚠️ Failed to cancel {failed_count} orders")
                 
-            self.logger.info("🧹 Limpeza de ordens concluída")
+            self.logger.info("🧹 Order cleanup completed")
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao limpar ordens: {e}")
+            self.logger.error(f"❌ Error cleaning up orders: {e}")
             import traceback
             self.logger.debug(f"Stack trace: {traceback.format_exc()}")
     
     def get_current_price(self) -> float:
-        """Obtém preço atual do mercado"""
+        """Gets the current market price"""
         
         try:
-            # Usar método real da API
+            # Use the real API method
             prices = self.auth.get_prices()
             
             if not prices:
-                self.logger.warning("⚠️ API retornou dados vazios para preços")
+                self.logger.warning("⚠️ API returned empty price data")
                 return 0
             
             if not isinstance(prices, dict):
-                self.logger.warning(f"⚠️ API retornou formato inválido: {type(prices)}")
+                self.logger.warning(f"⚠️ API returned invalid format: {type(prices)}")
                 return 0
                 
-            # API retorna {"success": true, "data": [...]}
+            # API returns {"success": true, "data": [...]}
             if not prices.get('success'):
-                self.logger.warning(f"⚠️ API retornou erro: {prices}")
+                self.logger.warning(f"⚠️ API returned error: {prices}")
                 return 0
                 
             data = prices.get('data')
             if not data:
-                self.logger.warning("⚠️ API não retornou dados de preços")
+                self.logger.warning("⚠️ API did not return price data")
                 return 0
                 
             if not isinstance(data, list):
-                self.logger.warning(f"⚠️ Dados de preços em formato inválido: {type(data)}")
+                self.logger.warning(f"⚠️ Price data in invalid format: {type(data)}")
                 return 0
             
-            # Procurar pelo símbolo específico
+            # Search for the specific symbol
             for item in data:
                 if item.get('symbol') == self.symbol:
-                    # Preço está em 'mark' ou 'mid'
+                    # Price is in 'mark' or 'mid'
                     price = item.get('mark') or item.get('mid')
                     if price:
                         price_float = float(price)
                         if price_float > 0:
                             return price_float
                         else:
-                            self.logger.warning(f"⚠️ Preço inválido recebido para {self.symbol}: {price}")
+                            self.logger.warning(f"⚠️ Invalid price received for {self.symbol}: {price}")
             
-            self.logger.warning(f"⚠️ Símbolo {self.symbol} não encontrado nos dados da API")
-            self.logger.debug(f"Símbolos disponíveis: {[item.get('symbol') for item in data[:5]]}")
+            self.logger.warning(f"⚠️ Symbol {self.symbol} not found in API data")
+            self.logger.debug(f"Available symbols: {[item.get('symbol') for item in data[:5]]}")
             return 0
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao obter preço: {e}")
+            self.logger.error(f"❌ Error getting price: {e}")
             import traceback
             self.logger.debug(f"Stack trace: {traceback.format_exc()}")
             return 0
     
     def run(self):
-        """Loop principal do bot"""
+        """Main bot loop"""
         
-        self.logger.info("🚀 Iniciando Grid Trading Bot...")
+        self.logger.info("🚀 Starting Grid Trading Bot...")
         
-        # Inicializar componentes
+        # Initialize components
         if not self.initialize_components():
-            self.logger.error("❌ Falha na inicialização - abortando")
+            self.logger.error("❌ Initialization failed - aborting")
             return
 
-        # Inicializando teste de symbol info (apenas para estratégia grid)
+        # Initialize symbol info test (only for grid strategy)
         if self.strategy_type == 'grid':
-            self.logger.info(f"🔍 Testando market info para {self.symbol}...")
+            self.logger.info(f"🔍 Testing market info for {self.symbol}...")
             test_info = self.auth.get_symbol_info(self.symbol)
             if test_info:
                 self.logger.info(f"✅ tick_size={test_info.get('tick_size')}, lot_size={test_info.get('lot_size')}")
         else:
-            self.logger.info("🔍 Testando conexão com múltiplos símbolos...")
+            self.logger.info("🔍 Testing connection with multiple symbols...")
 
         
-        # Obter preço inicial (apenas para estratégia grid)
+        # Get initial price (only for grid strategy)
         if self.strategy_type == 'grid':
             current_price = self.get_current_price()
             if current_price == 0:
-                self.logger.warning("⚠️ Preço inicial não obtido - tentando recuperar...")
-                # Fazer retry com delays
+                self.logger.warning("⚠️ Initial price not obtained - attempting to recover...")
+                # Retry with delays
                 for attempt in range(3):
-                    time.sleep(2)  # Aguardar 2 segundos
+                    time.sleep(2)  # Wait 2 seconds
                     current_price = self.get_current_price()
                     if current_price > 0:
-                        self.logger.info(f"✅ Preço recuperado na tentativa {attempt + 1}")
+                        self.logger.info(f"✅ Price recovered on attempt {attempt + 1}")
                         break
                 
                 if current_price == 0:
-                    self.logger.error("❌ Não foi possível obter preço inicial após 3 tentativas")
+                    self.logger.error("❌ Could not get initial price after 3 attempts")
                     return
             
-            self.logger.info(f"💰 Preço inicial {self.symbol}: ${current_price:,.2f}")
+            self.logger.info(f"💰 Initial price {self.symbol}: ${current_price:,.2f}")
         else:
-            current_price = 0  # Multi-asset gerencia seus próprios preços
-            self.logger.info("💰 Estratégia Multi-Asset: preços gerenciados internamente")
+            current_price = 0  # Multi-asset manages its own prices
+            self.logger.info("💰 Multi-Asset Strategy: prices managed internally")
         
-        # Verificar saldo se configurado
+        # Check balance if configured
         if self.check_balance:
-            self.logger.info("💳 Verificando saldo da conta...")
+            self.logger.info("💳 Checking account balance...")
             if not self.position_mgr.update_account_state():
-                self.logger.error("❌ Falha ao verificar saldo")
+                self.logger.error("❌ Failed to check balance")
                 return
         
-        # 🆕 Verifacao da conta
+        # Account verification
                 
-        self.logger.info("💳 Carregando informações da conta...")
+        self.logger.info("💳 Loading account information...")
         if self.position_mgr.update_account_state():
             self.logger.info("=" * 60)
-            self.logger.info("💰 STATUS DA CONTA:")
-            self.logger.info(f"   Saldo Total: ${self.position_mgr.account_balance:.2f}")
-            self.logger.info(f"   Margem Usada: ${self.position_mgr.margin_used:.2f}")
-            self.logger.info(f"   Margem Disponível: ${self.position_mgr.margin_available:.2f}")
+            self.logger.info("💰 ACCOUNT STATUS:")
+            self.logger.info(f"   Total Balance: ${self.position_mgr.account_balance:.2f}")
+            self.logger.info(f"   Used Margin: ${self.position_mgr.margin_used:.2f}")
+            self.logger.info(f"   Available Margin: ${self.position_mgr.margin_available:.2f}")
             
             if self.position_mgr.account_balance > 0:
                 margin_percent = (self.position_mgr.margin_available / 
                                 self.position_mgr.account_balance * 100)
-                self.logger.info(f"   Margem Livre: {margin_percent:.1f}%")
+                self.logger.info(f"   Free Margin: {margin_percent:.1f}%")
             
             self.logger.info("=" * 60)
         else:
-            self.logger.error("❌ Falha ao carregar informações da conta")
+            self.logger.error("❌ Failed to load account information")
 
-        # Inicializar estratégia com mensagens específicas
+        # Initialize strategy with specific messages
         messages = get_strategy_specific_messages(self.strategy_type)
         self.logger.strategy_info(messages['initialization'])
         
         grid_initialized = self.strategy.initialize_grid(current_price)
         if not grid_initialized:
             if self.strategy_type == 'multi_asset':
-                self.logger.warning("⚠️ Não foi possível inicializar Multi-Asset agora")
+                self.logger.warning("⚠️ Could not initialize Multi-Asset at this time")
             else:
-                self.logger.warning(f"⚠️ Não foi possível inicializar Grid agora (margem insuficiente)")
-            self.logger.info("🔄 Bot continuará monitorando e tentará novamente...")
+                self.logger.warning(f"⚠️ Could not initialize Grid now (insufficient margin)")
+            self.logger.info("🔄 Bot will keep monitoring and try again...")
         
-        # Verificar se estratégia foi inicializada
+        # Check if strategy was initialized
         grid_status = self.strategy.get_grid_status()
         messages = get_strategy_specific_messages(self.strategy_type)
         
         if self.strategy_type == 'grid':
             if grid_status['active_orders'] > 0:
-                self.logger.strategy_info(f"Retomado com {grid_status['active_orders']} ordens existentes")
+                self.logger.strategy_info(f"Resumed with {grid_status['active_orders']} existing orders")
             elif grid_initialized:
-                self.logger.strategy_info(f"Novo grid criado com {grid_status['active_orders']} ordens")
+                self.logger.strategy_info(f"New grid created with {grid_status['active_orders']} orders")
             else:
-                self.logger.strategy_info("Aguardando condições para criar grid...")
+                self.logger.strategy_info("Waiting for conditions to create grid...")
         else:
             if grid_initialized:
                 self.logger.strategy_info(messages['ready'])
             else:
-                self.logger.strategy_info("Aguardando condições de mercado...")
+                self.logger.strategy_info("Waiting for market conditions...")
         
         self.running = True
         self.start_time = datetime.now()
         
-        self.logger.info("✅ Bot operando!", force=True)
+        self.logger.info("✅ Bot is running!", force=True)
         self.logger.info("=" * 80)
         
-        # 🎯 VERIFICAÇÃO INICIAL DE TP/SL para estratégias Multi-Asset
+        # 🎯 INITIAL TP/SL CHECK for Multi-Asset strategies
         if self.strategy_type in ['multi_asset', 'multi_asset_enhanced']:
-            self.logger.info("🔍 Executando verificação inicial de TP/SL...")
+            self.logger.info("🔍 Running initial TP/SL check...")
             try:
                 if hasattr(self.strategy, '_check_all_tp_sl'):
                     self.strategy._check_all_tp_sl()
-                    self.logger.info("✅ Verificação inicial de TP/SL concluída")
+                    self.logger.info("✅ Initial TP/SL check completed")
                 else:
-                    self.logger.warning("⚠️ Método _check_all_tp_sl não encontrado na estratégia")
+                    self.logger.warning("⚠️ _check_all_tp_sl method not found in strategy")
             except Exception as e:
-                self.logger.error(f"❌ Erro na verificação inicial de TP/SL: {e}")
+                self.logger.error(f"❌ Error in initial TP/SL check: {e}")
         
-        # Loop principal
+        # Main loop
         iteration = 0
         last_rebalance = time.time()
         last_price_check = time.time()
-        last_grid_reset = time.time()  # ✨ NOVO: Controle do reset periódico
-        last_daily_report = datetime.now().date()  # Controle do relatório diário
+        last_grid_reset = time.time()  # ✨ NEW: Periodic reset control
+        last_daily_report = datetime.now().date()  # Daily report control
         
-        # Inicializar current_price baseado na estratégia
+        # Initialize current_price based on strategy
         if self.strategy_type == 'grid':
-            current_price = self.get_current_price()  # Grid usa preço único
+            current_price = self.get_current_price()  # Grid uses single price
         else:
-            current_price = 0  # Multi-asset não usa preço único
+            current_price = 0  # Multi-asset doesn't use single price
 
-        # Definir saldo inicial no risk manager
+        # Set initial balance in risk manager
         if self.risk_manager:
             initial_balance = self.position_mgr.account_balance
             self.risk_manager.set_initial_balance(initial_balance)
@@ -523,49 +523,49 @@ class GridTradingBot:
                 iteration += 1
                 current_time = time.time()
 
-                # ===== VERIFICAR SE BOT ESTÁ PAUSADO =====
+                # ===== CHECK IF BOT IS PAUSED =====
                 if self.risk_manager and self.risk_manager.check_if_paused():
-                    if iteration % 10 == 0:  # Log a cada 10 iterações
-                        self.logger.info("⏸️ Bot pausado - aguardando retomada...")
-                    time.sleep(10)  # Aguardar 10 segundos
-                    continue  # Pular resto do loop
+                    if iteration % 10 == 0:  # Log every 10 iterations
+                        self.logger.info("⏸️ Bot paused - waiting to resume...")
+                    time.sleep(10)  # Wait 10 seconds
+                    continue  # Skip the rest of the loop
 
-                # DEBUG: Enviar status do Risk Manager (apenas em modo debug)
+                # DEBUG: Send Risk Manager status (only in debug mode)
                 debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
                 if self.risk_manager and debug_mode and iteration % 20 == 0:
                     self.risk_manager.send_periodic_debug_status()
 
-                # 🔧 Obter preço apenas para estratégia grid com tratamento robusto
+                # 🔧 Get price only for grid strategy with robust error handling
                 if self.strategy_type == 'grid' and current_time - last_price_check >= 30:
                     new_price = self.get_current_price()
                     if new_price > 0:
                         current_price = new_price
                     else:
-                        self.logger.warning("⚠️ Falha ao atualizar preço - mantendo preço anterior")
+                        self.logger.warning("⚠️ Failed to update price - keeping previous price")
                     last_price_check = current_time
 
-               # ===== VERIFICAR RISCO DA POSIÇÃO (NÍVEL 1) =====
+               # ===== CHECK POSITION RISK (LEVEL 1) =====
                 if self.risk_manager and self.strategy_type == 'grid':
                     should_close, reason = self.risk_manager.check_position_risk(self.symbol, current_price)
                     
                     if should_close:
-                        self.logger.warning(f"🛑 Fechando posição por: {reason}")
+                        self.logger.warning(f"🛑 Closing position due to: {reason}")
                         
-                        # Fechar posição
+                        # Close position
                         try:
                             position = self.position_mgr.positions.get(self.symbol, {})
                             quantity = position.get('quantity', 0)
                             
                             if quantity != 0:
-                                # Determinar lado da ordem de fechamento
+                                # Determine closing order side
                                 close_side = 'ask' if quantity > 0 else 'bid'
                                 close_qty = abs(quantity)
                                 
-                                self.logger.info(f"📤 Criando ordem de fechamento: {close_side} {close_qty} @ MARKET")
+                                self.logger.info(f"📤 Creating closing order: {close_side} {close_qty} @ MARKET")
                                 
-                                # 🔥 IMPLEMENTAÇÃO REAL DA ORDEM DE FECHAMENTO
+                                # 🔥 ACTUAL CLOSING ORDER IMPLEMENTATION
                                 try:
-                                    # Criar ordem MARKET para fechar posição
+                                    # Create MARKET order to close position
                                     close_order = self.auth.create_order(
                                         symbol=self.symbol,
                                         side=close_side,
@@ -576,24 +576,24 @@ class GridTradingBot:
                                     )
                                     
                                     if close_order and close_order.get('success'):
-                                        self.logger.info(f"✅ Posição fechada com sucesso: {close_order.get('order_id')}")
+                                        self.logger.info(f"✅ Position closed successfully: {close_order.get('order_id')}")
                                         
-                                        # Calcular PNL realizado
+                                        # Calculate realized PNL
                                         avg_price = position.get('avg_price', 0)
                                         pnl_usd = (current_price - avg_price) * quantity
                                         
-                                        # Registrar fechamento do ciclo
+                                        # Record cycle close
                                         self.risk_manager.record_cycle_close(self.symbol, pnl_usd, reason)
                                         
-                                        # Cancelar todas as ordens do grid
-                                        self.logger.info("🚫 Cancelando ordens do grid...")
+                                        # Cancel all grid orders
+                                        self.logger.info("🚫 Canceling grid orders...")
                                         if hasattr(self.strategy, 'cancel_all_orders'):
                                             self.strategy.cancel_all_orders()
                                         
-                                        # Aguardar cancelamentos
+                                        # Wait for cancellations
                                         time.sleep(2)
                                         
-                                        # Resetar posição
+                                        # Reset position
                                         self.position_mgr.positions[self.symbol] = {
                                             'quantity': 0,
                                             'avg_price': 0,
@@ -601,116 +601,116 @@ class GridTradingBot:
                                             'unrealized_pnl': 0
                                         }
                                         
-                                        # Reiniciar grid
-                                        self.logger.info("♻️ Reiniciando grid...")
+                                        # Reset grid
+                                        self.logger.info("♻️ Resetting grid...")
                                         self.risk_manager.reset_cycle()
                                         
-                                        # Aguardar antes de recriar grid
+                                        # Wait before recreating grid
                                         time.sleep(3)
                                         
                                         if self.strategy.initialize_grid(current_price):
-                                            self.logger.info("✅ Grid reiniciado com sucesso!")
+                                            self.logger.info("✅ Grid reset successfully!")
                                         else:
-                                            self.logger.warning("⚠️ Aguardando condições para recriar grid...")
+                                            self.logger.warning("⚠️ Waiting for conditions to recreate grid...")
                                     else:
-                                        error_msg = close_order.get('error', 'Erro desconhecido') if close_order else 'Sem resposta da API'
-                                        self.logger.error(f"❌ Falha ao criar ordem de fechamento: {error_msg}")
+                                        error_msg = close_order.get('error', 'Unknown error') if close_order else 'No API response'
+                                        self.logger.error(f"❌ Failed to create closing order: {error_msg}")
                                         
-                                        # Tentar novamente na próxima iteração
-                                        self.logger.warning("⚠️ Tentará fechar posição novamente na próxima verificação")
+                                        # Try again in the next iteration
+                                        self.logger.warning("⚠️ Will attempt to close position again in next check")
                                         
                                 except Exception as order_error:
-                                    self.logger.error(f"❌ Erro ao executar ordem de fechamento: {order_error}")
+                                    self.logger.error(f"❌ Error executing closing order: {order_error}")
                                     import traceback
                                     self.logger.error(traceback.format_exc())
                                     
-                                    # Notificar via Telegram
+                                    # Notify via Telegram
                                     if self.telegram:
                                         try:
                                             self.telegram.send_error_alert(
-                                                error_message=f"Falha ao fechar posição: {order_error}",
+                                                error_message=f"Failed to close position: {order_error}",
                                                 traceback_info=traceback.format_exc()
                                             )
                                         except:
                                             pass
                                             
                         except Exception as e:
-                            self.logger.error(f"❌ Erro ao fechar posição: {e}")
+                            self.logger.error(f"❌ Error closing position: {e}")
                             import traceback
                             self.logger.error(traceback.format_exc())
                 
-                # ===== VERIFICAR LIMITE DE SESSÃO (NÍVEL 2) =====
+                # ===== CHECK SESSION LIMITS (LEVEL 2) =====
                 if self.risk_manager:
                     should_stop, reason = self.risk_manager.check_session_limits()
                     
                     if should_stop:
-                        self.logger.error(f"🚨 LIMITE DE SESSÃO ATINGIDO: {reason}")
+                        self.logger.error(f"🚨 SESSION LIMIT REACHED: {reason}")
                         
-                        # Fechar posição se existir
+                        # Close position if it exists
                         position = self.position_mgr.positions.get(self.symbol, {})
                         if position.get('quantity', 0) != 0:
-                            self.logger.warning("🛑 Fechando posição por limite de sessão...")
-                            # Implementar fechamento aqui
+                            self.logger.warning("🛑 Closing position due to session limit...")
+                            # Implement closing logic here
                         
-                        # Cancelar todas as ordens
+                        # Cancel all orders
                         if hasattr(self.strategy, 'cancel_all_orders'):
                             self.strategy.cancel_all_orders()
                         
-                        # Verificar ação configurada
+                        # Check configured action
                         action = self.risk_manager.get_action_on_limit()
                         
                         if action == 'shutdown':
-                            self.logger.error("🛑 Encerrando bot por limite de sessão...")
+                            self.logger.error("🛑 Stopping bot due to session limit...")
                             self.running = False
                             break
-                        # Se for 'pause', o bot já foi pausado pelo risk_manager 
+                        # If 'pause', the bot was already paused by risk_manager 
                 
-                # Log de heartbeat específico da estratégia
+                # Strategy-specific heartbeat log
                 if iteration % 10 == 0:
                     uptime = datetime.now() - self.start_time
                     if self.strategy_type == 'grid':
-                        self.logger.info(f"💓 Heartbeat #{iteration} - Uptime: {uptime} | Preço: ${current_price:,.2f}", force=True)
+                        self.logger.info(f"💓 Heartbeat #{iteration} - Uptime: {uptime} | Price: ${current_price:,.2f}", force=True)
                     else:
                         active_positions = len(getattr(self.strategy, 'active_positions', []))
-                        self.logger.info(f"💓 Heartbeat #{iteration} - Uptime: {uptime} | Posições: {active_positions}", force=True)
+                        self.logger.info(f"💓 Heartbeat #{iteration} - Uptime: {uptime} | Positions: {active_positions}", force=True)
                 
-                # ATIVAR VERIFICAÇÃO DE MARGEM (A CADA 5 ITERAÇÕES = ~5 SEGUNDOS)                
+                # ENABLE MARGIN CHECK (EVERY 5 ITERATIONS = ~5 SECONDS)                
                 if self.check_balance and iteration % 5 == 0:
-                    # 1. Atualizar estado da conta
+                    # 1. Update account state
                     self.position_mgr.update_account_state()
                     
-                    # 2. ✅ ATIVAR VERIFICAÇÃO DE MARGEM (DESCOMENTADO)
+                    # 2. ✅ ENABLE MARGIN CHECK (UNCOMMENTED)
                     is_safe, msg = self.position_mgr.check_margin_safety()
                     
                     if not is_safe:
-                        # Log do problema detectado
+                        # Log the detected issue
                         self.logger.warning(f"⚠️ {msg}")
                         
-                        # 🔥 A FUNÇÃO JÁ EXECUTOU AS AÇÕES AUTOMATICAMENTE:
-                        # - Se margem < 20% → Cancelou ordens
-                        # - Se margem < 10% → Vendeu posição
+                        # 🔥 THE FUNCTION ALREADY EXECUTED ACTIONS AUTOMATICALLY:
+                        # - If margin < 20% → Canceled orders
+                        # - If margin < 10% → Sold position
                         
-                        # Bot CONTINUA OPERANDO (não para)
+                        # Bot CONTINUES OPERATING (does not stop)
                     else:
-                        # Margem OK - apenas log debug
+                        # Margin OK - debug log only
                         self.logger.debug(f"✅ {msg}")
                 
-                # Verificar ordens executadas a cada 10 segundos
+                # Check filled orders every 10 seconds
                 if iteration % 10 == 0:
-                    self.logger.debug(f"🔍 Verificando ordens executadas...")
+                    self.logger.debug(f"🔍 Checking filled orders...")
                     self.strategy.check_filled_orders(current_price)
 
-                # Verificar condições de parada
+                # Check stop conditions
                 # should_stop, reason = self.position_mgr.should_stop_trading()
                 # if should_stop:
-                #     self.logger.error(f"🛑 Parando trading: {reason}")
+                #     self.logger.error(f"🛑 Stopping trading: {reason}")
                 #     self.stop()
                 #     break
                 
-                # Rebalancear estratégia se necessário
+                # Rebalance strategy if needed
                 if current_time - last_rebalance >= self.rebalance_interval:
                     
-                    # Verificar margem ANTES de rebalancear
+                    # Check margin BEFORE rebalancing
                     self.position_mgr.update_account_state()
                     
                     if self.position_mgr.account_balance > 0:
@@ -718,94 +718,94 @@ class GridTradingBot:
                                         self.position_mgr.account_balance * 100)
                         
                         if margin_percent < 20:
-                            self.logger.warning(f"⚠️ Margem baixa ({margin_percent:.1f}%) - pulando rebalanceamento")
+                            self.logger.warning(f"⚠️ Low margin ({margin_percent:.1f}%) - skipping rebalance")
                             
-                            # Verificar proteções
+                            # Check safety measures
                             is_safe, msg = self.position_mgr.check_margin_safety()
                             if not is_safe:
                                 self.logger.warning(f"🔧 {msg}")
                             
-                            last_rebalance = current_time  # Atualizar timer
-                            continue  # Pular para próxima iteração do loop
+                            last_rebalance = current_time  # Update timer
+                            continue  # Skip to next iteration
                     
                     if self.strategy_type == 'grid':
-                        self.logger.info(f"🔄 Verificando rebalanceamento em ${current_price:,.2f}")
-                        if self.risk_manager and iteration % 30 == 0:  # A cada 30 iterações
+                        self.logger.info(f"🔄 Checking rebalance at ${current_price:,.2f}")
+                        if self.risk_manager and iteration % 30 == 0:  # Every 30 iterations
                             self.risk_manager.log_periodic_status()
                     else:
-                        self.logger.info("🔄 Verificando sinais Multi-Asset")
+                        self.logger.info("🔄 Checking Multi-Asset signals")
                     
                     try:
                         self.strategy.check_and_rebalance(current_price)
                         
-                        # 🆕 Se não há ordens ativas, tentar recriar grid
+                        # 🆕 If no active orders, try to recreate grid
                         grid_status = self.strategy.get_grid_status()
                         if grid_status['active_orders'] == 0:
-                            self.logger.info("🔄 Sem ordens ativas - tentando recriar grid...")
+                            self.logger.info("🔄 No active orders - attempting to recreate grid...")
                             if self.strategy.initialize_grid(current_price):
-                                self.logger.info("✅ Grid recriado com sucesso!")
+                                self.logger.info("✅ Grid recreated successfully!")
                             else:
-                                self.logger.info("⚠️ Ainda sem margem suficiente - continuando monitoramento...")
+                                self.logger.info("⚠️ Still not enough margin - continuing monitoring...")
                         
                     except Exception as e:
-                        self.logger.warning(f"⚠️ Erro no rebalanceamento: {e}")
-                        # Não para o bot - apenas continua
+                        self.logger.warning(f"⚠️ Rebalancing error: {e}")
+                        # Don't stop the bot - just continue
                     last_rebalance = current_time 
                 
-                # ✨ NOVA FUNCIONALIDADE: Reset periódico do grid
+                # ✨ NEW FEATURE: Periodic grid reset
                 if (self.enable_periodic_reset and 
                     self.strategy_type == 'grid' and 
                     current_time - last_grid_reset >= self.grid_reset_interval):
                     
                     try:
                         reset_minutes = self.grid_reset_interval // 60
-                        self.logger.info(f"🔄🔥 RESET PERIÓDICO: Refazendo grid completo após {reset_minutes} minutos")
+                        self.logger.info(f"🔄🔥 PERIODIC RESET: Rebuilding complete grid after {reset_minutes} minutes")
                         
-                        # Fazer reset completo do grid
+                        # Perform complete grid reset
                         if hasattr(self.strategy, 'reset_grid_completely'):
                             success = self.strategy.reset_grid_completely(current_price)
                             if success:
-                                self.logger.info("✅ Grid resetado e recriado com sucesso!")
+                                self.logger.info("✅ Grid reset and recreated successfully!")
                             else:
-                                self.logger.warning("⚠️ Falha no reset - mantendo grid atual")
+                                self.logger.warning("⚠️ Reset failed - keeping current grid")
                         else:
-                            # Fallback: usar método tradicional
-                            self.logger.info("🔄 Usando método tradicional de reset...")
+                            # Fallback: use traditional method
+                            self.logger.info("🔄 Using traditional reset method...")
                             self.strategy.cancel_all_orders()
-                            time.sleep(2)  # Aguardar cancelamentos
+                            time.sleep(2)  # Wait for cancellations
                             if self.strategy.initialize_grid(current_price):
-                                self.logger.info("✅ Grid resetado e recriado com sucesso!")
+                                self.logger.info("✅ Grid reset and recreated successfully!")
                             else:
-                                self.logger.warning("⚠️ Falha no reset - tentando novamente no próximo ciclo")
+                                self.logger.warning("⚠️ Reset failed - will try again next cycle")
                         
                     except Exception as e:
-                        self.logger.error(f"❌ Erro no reset periódico: {e}")
-                        # Continua operação normal mesmo com falha no reset
+                        self.logger.error(f"❌ Error in periodic reset: {e}")
+                        # Continue normal operation even if reset fails
                     
                     last_grid_reset = current_time 
                         
-                # Status periódico
-                if iteration % 60 == 0:  # 🔧 A cada 60 iterações (1 minuto)
+                # Periodic status
+                if iteration % 60 == 0:  # 🔧 Every 60 iterations (1 minute)
                     self.print_status()
 
-                # Relatório detalhado a cada 10 minutos
+                # Detailed report every 10 minutes
                 if iteration % 600 == 0:
                     self.print_detailed_performance()
                 
-                # Aguardar próxima iteração
+                # Wait for next iteration
                 time.sleep(1)
 
             except KeyboardInterrupt:
-                self.logger.info("🛑 Interrupção via teclado")
-                break  # Sair do while loop
+                self.logger.info("🛑 Keyboard interrupt")
+                break  # Exit while loop
 
             except Exception as e:
-                self.logger.error(f"❌ Erro no loop principal: {e}")
+                self.logger.error(f"❌ Error in main loop: {e}")
                 import traceback
                 traceback_str = traceback.format_exc()
                 self.logger.error(traceback_str)
 
-                # Notificar erro via Telegram (com proteção)
+                # Notify error via Telegram (with protection)
                 try:
                     if hasattr(self, 'telegram') and self.telegram:
                         self.telegram.send_error_alert(
@@ -813,47 +813,47 @@ class GridTradingBot:
                             traceback_info=traceback_str
                         )
                 except Exception as telegram_error:
-                    self.logger.warning(f"⚠️ Falha ao enviar erro via Telegram: {telegram_error}")
+                    self.logger.warning(f"⚠️ Failed to send error via Telegram: {telegram_error}")
                 
-                # Aguardar antes de continuar
+                # Wait before continuing
                 time.sleep(5)
 
-        # LIMPEZA FINAL (fora do while loop)
+        # FINAL CLEANUP (outside while loop)
         try:
             if hasattr(self, 'risk_manager') and self.risk_manager:
                 self.risk_manager.close_session()
         except Exception as rm_error:
-            self.logger.warning(f"⚠️ Erro ao fechar risk manager: {rm_error}")
+            self.logger.warning(f"⚠️ Error closing risk manager: {rm_error}")
         
-        self.logger.info("🏁 Encerrando bot...")
+        self.logger.info("🏁 Stopping bot...")
         
-        # Shutdown protegido
+        # Protected shutdown
         try:
             self.shutdown()
         except Exception as shutdown_error:
-            self.logger.error(f"❌ Erro durante shutdown: {shutdown_error}")
-            # Tentar shutdown manual dos componentes críticos
+            self.logger.error(f"❌ Error during shutdown: {shutdown_error}")
+            # Try manual shutdown of critical components
             self.running = False
     
     def print_status(self):
-        """Imprime status atual do bot com métricas avançadas"""
+        """Print current bot status with advanced metrics"""
         
         self.logger.info("=" * 80)
-        self.logger.info("📊 STATUS DO BOT")
+        self.logger.info("📊 BOT STATUS")
         self.logger.info("=" * 80)
         
-        # Status do grid/estratégia
+        # Grid/strategy status
         grid_status = self.strategy.get_grid_status()
         strategy_name = "Multi-Asset" if self.strategy_type == 'multi_asset' else "Grid"
-        self.logger.info(f"{strategy_name} Ativo: {grid_status['active']}")
+        self.logger.info(f"{strategy_name} Active: {grid_status['active']}")
         
         if self.strategy_type == 'grid':
-            self.logger.info(f"Preço Central: ${grid_status['center_price']:,.2f}")
-            self.logger.info(f"Ordens Ativas: {grid_status['active_orders']}")
+            self.logger.info(f"Center Price: ${grid_status['center_price']:,.2f}")
+            self.logger.info(f"Active Orders: {grid_status['active_orders']}")
         else:
-            self.logger.info(f"Posições Ativas: {grid_status['active_orders']}")  # Para multi-asset, são posições
+            self.logger.info(f"Active Positions: {grid_status['active_orders']}")  # For multi-asset, these are positions
         
-        # 🆕 ADICIONAR: Métricas de performance
+        # 🆕 ADD: Performance metrics
         try:
             performance_metrics = self.strategy.get_performance_metrics()
             
@@ -864,42 +864,42 @@ class GridTradingBot:
             self.logger.info(f"  Sharpe Ratio: {performance_metrics.get('sharpe_ratio', 0):.2f}")
             self.logger.info(f"  Max Drawdown: {performance_metrics.get('max_drawdown_percent', 0):.1f}%")
             
-            self.logger.info("🔧 GRID ADAPTATIVO:")
-            self.logger.info(f"  Modo: {'ATIVO' if performance_metrics.get('adaptive_mode') else 'INATIVO'}")
-            self.logger.info(f"  Volatilidade: {performance_metrics.get('current_volatility', 0):.4f}")
-            self.logger.info(f"  Spacing Atual: {performance_metrics.get('current_spacing', 0):.3f}%")
+            self.logger.info("🔧 ADAPTIVE GRID:")
+            self.logger.info(f"  Mode: {'ACTIVE' if performance_metrics.get('adaptive_mode') else 'INACTIVE'}")
+            self.logger.info(f"  Volatility: {performance_metrics.get('current_volatility', 0):.4f}")
+            self.logger.info(f"  Current Spacing: {performance_metrics.get('current_spacing', 0):.3f}%")
             self.logger.info(f"  Grid Efficiency: {performance_metrics.get('grid_efficiency', 0):.1f}%")
             
         except Exception as e:
-            self.logger.warning(f"⚠️ Erro ao obter métricas: {e}")
+            self.logger.warning(f"⚠️ Error getting metrics: {e}")
         
-        # Status de posição (manter código existente se desejado)
+        # Position status (keep existing code if desired)
         # pos_status = self.position_mgr.get_status_summary()
-        # self.logger.info(f"Saldo: ${pos_status['account_balance']:,.2f}")
+        # self.logger.info(f"Balance: ${pos_status['account_balance']:,.2f}")
         
         self.logger.info("=" * 80)
     
     def print_detailed_performance(self):
-        """Imprime relatório detalhado de performance"""
+        """Print detailed performance report"""
         
         if self.strategy and hasattr(self.strategy, 'performance_tracker'):
             self.strategy.print_performance_summary()
             
-            # 🆕 ESTATÍSTICAS ESPECÍFICAS DA VERSÃO ENHANCED
+            # 🆕 ENHANCED VERSION SPECIFIC STATISTICS
             if self.strategy_type == 'multi_asset_enhanced' and hasattr(self.strategy, 'get_enhanced_statistics'):
                 self.strategy.log_performance_summary()
                 
         else:
-            self.logger.warning("⚠️ Performance tracker não disponível")
+            self.logger.warning("⚠️ Performance tracker not available")
     
     def shutdown(self):
-        """Encerra o bot graciosamente"""
+        """Shut down the bot gracefully"""
         
-        self.logger.info("🔄 Iniciando shutdown...")
+        self.logger.info("🔄 Starting shutdown...")
         
         # Cancel all open orders
         if self.position_mgr:
-            self.logger.info("🚫 Cancelando todas as ordens abertas...")
+            self.logger.info("🚫 Canceling all open orders...")
             try:
                 # Get all open orders
                 open_orders = self.auth.get_open_orders()
@@ -907,81 +907,81 @@ class GridTradingBot:
                     # Filter orders for our symbol
                     symbol_orders = [o for o in open_orders if o.get('symbol') == self.symbol]
                     if symbol_orders:
-                        self.logger.info(f"🔍 Encontradas {len(symbol_orders)} ordens abertas para {self.symbol}")
+                        self.logger.info(f"🔍 Found {len(symbol_orders)} open orders for {self.symbol}")
                         self._clean_old_orders()  # Use the existing method to cancel orders
                     else:
-                        self.logger.info(f"ℹ️ Nenhuma ordem aberta encontrada para {self.symbol}")
+                        self.logger.info(f"ℹ️ No open orders found for {self.symbol}")
                 else:
-                    self.logger.info("ℹ️ Nenhuma ordem aberta encontrada na conta")
+                    self.logger.info("ℹ️ No open orders found in the account")
             except Exception as e:
-                self.logger.error(f"❌ Erro ao cancelar ordens durante o shutdown: {e}")
+                self.logger.error(f"❌ Error canceling orders during shutdown: {e}")
                 import traceback
                 self.logger.debug(f"Stack trace: {traceback.format_exc()}")
         
         # Print final report
         if self.start_time:
             uptime = datetime.now() - self.start_time
-            self.logger.info(f"⏱️ Tempo de operação: {uptime}")
+            self.logger.info(f"⏱️ Uptime: {uptime}")
         
         # Print final balance
         if self.position_mgr:
             try:
                 if self.position_mgr.update_account_state():
                     self.logger.info("=" * 60)
-                    self.logger.info("💰 STATUS FINAL DA CONTA:")
-                    self.logger.info(f"   Saldo Total: ${self.position_mgr.account_balance:,.2f}")
-                    self.logger.info(f"   Margem Usada: ${self.position_mgr.margin_used:,.2f}")
-                    self.logger.info(f"   Margem Disponível: ${self.position_mgr.margin_available:,.2f}")
+                    self.logger.info("💰 FINAL ACCOUNT STATUS:")
+                    self.logger.info(f"   Total Balance: ${self.position_mgr.account_balance:,.2f}")
+                    self.logger.info(f"   Used Margin: ${self.position_mgr.margin_used:,.2f}")
+                    self.logger.info(f"   Available Margin: ${self.position_mgr.margin_available:,.2f}")
                     
                     if hasattr(self.position_mgr, 'get_open_positions'):
                         positions = self.position_mgr.get_open_positions()
                         if positions:
-                            self.logger.info("\n📊 POSIÇÕES ABERTAS:")
+                            self.logger.info("\n📊 OPEN POSITIONS:")
                             for pos in positions:
                                 pnl = pos.get('unrealized_pnl', 0)
                                 self.logger.info(f"   {pos.get('symbol')}: {pos.get('size', 0):.4f} @ ${pos.get('entry_price', 0):.2f} | PnL: ${pnl:,.2f}")
             except Exception as e:
-                self.logger.error(f"❌ Erro ao obter status final da conta: {e}")
+                self.logger.error(f"❌ Error getting final account status: {e}")
         
         self.logger.info("=" * 80)
-        self.logger.info("✅ Bot encerrado com sucesso")
+        self.logger.info("✅ Bot stopped successfully")
         self.logger.info("=" * 80)
     
     def stop(self):
-        """Para o bot"""
+        """Stop the bot"""
         self.running = False
     
     def signal_handler(self, signum, frame):
-        """Handler para sinais de sistema"""
-        self.logger.info(f"🛑 Sinal recebido: {signum}")
+        """Handler for system signals"""
+        self.logger.info(f"🛑 Signal received: {signum}")
         self.stop()
 
 
 def main():
-    """Função principal"""
+    """Main function"""
     
     print("=" * 80)
     print("🤖 PACIFICA GRID TRADING BOT")
     print("=" * 80)
     print()
     
-    # Verificar arquivo .env
+    # Check for .env file
     if not Path('.env').exists():
-        print("❌ Arquivo .env não encontrado!")
-        print("📝 Crie um arquivo .env com as configurações necessárias")
+        print("❌ .env file not found!")
+        print("📝 Please create a .env file with the required configurations")
         return
     
-    # Criar e executar bot
+    # Create and run bot
     bot = GridTradingBot()
     
     try:
         bot.run()
     except Exception as e:
-        print(f"❌ Erro fatal: {e}")
+        print(f"❌ Fatal error: {e}")
         import traceback
         traceback.print_exc()
     finally:
-        print("\n👋 Até logo!")
+        print("\n👋 Goodbye!")
 
 
 if __name__ == "__main__":
