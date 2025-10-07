@@ -48,7 +48,7 @@ def sign_message(message: str, keypair: Keypair) -> str:
     return base58.b58encode(bytes(signature)).decode("utf-8")
 
 # ============================================================================
-# CONFIGURAÇÃO DO SISTEMA DE LOGGING
+# LOGGING SYSTEM CONFIGURATION
 # ============================================================================
 
 def setup_logging() -> logging.Logger:
@@ -94,10 +94,10 @@ def setup_logging() -> logging.Logger:
     debug_logger.propagate = False
 
     logger.info("=" * 80)
-    logger.info("🔒 Sistema de Agent Wallet inicializado (SEM PRIVATE KEY)")
-    logger.info(f"Arquivo de log principal: {log_file}")
-    logger.info(f"Arquivo de debug: {debug_file}")
-    logger.info(f"Nível de log: {env_level}")
+    logger.info("🔒 Agent Wallet system initialized (NO PRIVATE KEY)")
+    logger.info(f"Main log file: {log_file}")
+    logger.info(f"Debug file: {debug_file}")
+    logger.info(f"Log level: {env_level}")
     logger.info("=" * 80)
 
     return logger
@@ -457,7 +457,7 @@ class PacificaAuth:
 
     def cancel_all_orders(self, symbol: str = None) -> dict:
         """
-        Cancela todas as ordens de um símbolo específico ou todas as ordens
+        Cancel all orders for a specific symbol or all orders
         """
         
         try:
@@ -473,7 +473,7 @@ class PacificaAuth:
                 self.logger.info(f"🚫 Cancelando todas as ordens de {symbol}: {len(orders_to_cancel)} ordens")
             else:
                 orders_to_cancel = all_orders
-                self.logger.info(f"🚫 Cancelando TODAS as ordens: {len(orders_to_cancel)} ordens")
+                self.logger.info(f"🚫 Canceling ALL orders: {len(orders_to_cancel)} ordens")
             
             if not orders_to_cancel:
                 return {"success": True, "message": f"Nenhuma ordem de {symbol} para cancelar", "cancelled": 0, "failed": 0}
@@ -508,12 +508,12 @@ class PacificaAuth:
             }
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao cancelar todas as ordens: {e}")
+            self.logger.error(f"❌ Error canceling all orders: {e}")
             return {"success": False, "error": str(e)}
 
     def cancel_stop_orders(self, symbol: str = None) -> dict:
         """
-        Cancela apenas ordens de Stop Loss e Take Profit
+        Cancel only Stop Loss and Take Profit orders
         """
         
         try:
@@ -523,7 +523,7 @@ class PacificaAuth:
             if not all_orders:
                 return {"success": True, "message": "Nenhuma ordem para cancelar", "cancelled": 0, "failed": 0}
             
-            # Filtrar ordens TP/SL
+            # Filter TP/SL orders
             stop_orders = []
             for order in all_orders:
                 order_type = order.get('type', '')
@@ -546,7 +546,7 @@ class PacificaAuth:
                 symbol_msg = f"de {symbol}" if symbol else ""
                 return {"success": True, "message": f"Nenhuma ordem TP/SL {symbol_msg} para cancelar", "cancelled": 0, "failed": 0}
             
-            self.logger.info(f"🚫 Cancelando ordens TP/SL: {len(stop_orders)} ordens")
+            self.logger.info(f"🚫 Canceling TP/SL orders: {len(stop_orders)} ordens")
             
             cancelled_count = 0
             failed_count = 0
@@ -578,12 +578,12 @@ class PacificaAuth:
             }
             
         except Exception as e:
-            self.logger.error(f"❌ Erro ao cancelar ordens TP/SL: {e}")
+            self.logger.error(f"❌ Error canceling TP/SL orders: {e}")
             return {"success": False, "error": str(e)}
 
     def get_account_info(self) -> Optional[Dict]:
         """
-        Busca informações da conta (endpoint público)
+        Fetches account information (endpoint público)
         Endpoint: GET /api/v1/account?account={wallet}
         """
         
@@ -592,7 +592,7 @@ class PacificaAuth:
         
         try:
             self.logger.info("=" * 70)
-            self.logger.info("🔍 REQUISIÇÃO GET ACCOUNT INFO")
+            self.logger.info("🔍 GET ACCOUNT INFO REQUEST")
             self.logger.info(f"   URL: {url}")
             self.logger.info(f"   Wallet: {self.main_public_key}")
             self.logger.info("=" * 70)
@@ -610,11 +610,11 @@ class PacificaAuth:
                 data = response.json()
                 
                 # Log da estrutura recebida
-                self.logger.info("✅ Resposta recebida com sucesso")
+                self.logger.info("✅ Response received successfully")
                 self.logger.info(f"   Success: {data.get('success')}")
                 self.logger.info(f"   Error: {data.get('error')}")
                 
-                # 🔧 SUPORTE PARA AMBOS FORMATOS: ARRAY OU OBJETO
+                # 🔧 SUPPORT FOR BOTH FORMATS: ARRAY OR OBJECT
                 if 'data' in data:
                     raw_data = data['data']
                     account_item = None
@@ -627,7 +627,7 @@ class PacificaAuth:
                             self.logger.warning("⚠️ Array vazio - sem dados de conta")
                     
                     elif isinstance(raw_data, dict):
-                        self.logger.info("   Data: OBJETO (formato direto)")
+                        self.logger.info("   Data: OBJECT (direct format)")
                         account_item = raw_data
                     
                     else:
@@ -636,7 +636,7 @@ class PacificaAuth:
                     
                     # Processar dados se encontrados
                     if account_item:
-                        self.logger.info("   Dados da conta:")
+                        self.logger.info("   Account data:")
                         self.logger.info(f"      balance: {account_item.get('balance', 'N/A')}")
                         self.logger.info(f"      account_equity: {account_item.get('account_equity', 'N/A')}")
                         self.logger.info(f"      available_to_spend: {account_item.get('available_to_spend', 'N/A')}")
@@ -644,16 +644,16 @@ class PacificaAuth:
                         self.logger.info(f"      positions_count: {account_item.get('positions_count', 'N/A')}")
                         self.logger.info(f"      orders_count: {account_item.get('orders_count', 'N/A')}")
                     else:
-                        self.logger.warning("⚠️ Nenhum dado de conta encontrado")
+                        self.logger.warning("⚠️ No account data found")
                 else:
-                    self.logger.warning("⚠️ Chave 'data' não encontrada na resposta")
+                    self.logger.warning("⚠️ 'data' key not found in response")
                 
                 self.logger.info("=" * 70)
                 return data
                 
             elif response.status_code == 401:
-                self.logger.warning("🔒 Erro 401 - Não autorizado")
-                self.logger.info("   Tentando método autenticado...")
+                self.logger.warning("🔒 Unauthorized error")
+                self.logger.info("   Trying authenticated method...")
                 return self._get_account_info_authenticated()
                 
             else:
@@ -662,15 +662,15 @@ class PacificaAuth:
                 return None
                 
         except requests.Timeout:
-            self.logger.error("❌ Timeout na requisição (10s)")
+            self.logger.error("❌ Timeout in request (10s)")
             return None
             
         except requests.RequestException as e:
-            self.logger.error(f"❌ Erro de rede: {e}")
+            self.logger.error(f"❌ Network error: {e}")
             return None
             
         except json.JSONDecodeError as e:
-            self.logger.error(f"❌ Erro ao decodificar JSON: {e}")
+            self.logger.error(f"❌ JSON decode error: {e}")
             self.logger.error(f"   Response raw: {response.text[:500]}")
             return None
             
@@ -682,14 +682,14 @@ class PacificaAuth:
 
     def get_open_orders(self, symbol: str = None) -> Optional[List]:
         """
-        Busca ordens abertas da conta usando Agent Wallet se necessário
-        🔒 SEGURO: Tenta público primeiro, depois Agent Wallet se precisar
+        Fetches open orders from account usando Agent Wallet se necessário
+        🔒 SECURE: Try public first, then Agent Wallet if needed
         """
         
         # Primeiro tentar sem autenticação
         url = f"{self.base_url}/orders?account={self.main_public_key}"
         
-        self.logger.debug(f"🔍 Buscando ordens abertas para account: {self.main_public_key}")
+        self.logger.debug(f"🔍 Searching open orders for account: {self.main_public_key}")
         
         try:
             response = requests.get(url, timeout=10)
@@ -718,7 +718,7 @@ class PacificaAuth:
                 
             elif response.status_code == 401:
                 # Se precisar de autenticação, usar Agent Wallet
-                self.logger.info("🔒 Endpoint requer autenticação - usando Agent Wallet")
+                self.logger.info("🔒 Endpoint requires authentication - using Agent Wallet")
                 return self._get_open_orders_authenticated(symbol)
             else:
                 self.logger.error(f"❌ Erro {response.status_code}: {response.text[:200]}")
@@ -730,7 +730,7 @@ class PacificaAuth:
 
     def _get_open_orders_authenticated(self, symbol: str = None) -> Optional[List]:
         """
-        Busca ordens abertas com autenticação Agent Wallet
+        Get open orders with Agent Wallet authentication
         """
         
         timestamp = int(time.time() * 1_000)
@@ -769,7 +769,7 @@ class PacificaAuth:
             if response.status_code == 200:
                 data = response.json()
                 orders = data.get('data', []) if isinstance(data, dict) else data
-                self.logger.info(f"✅ {len(orders)} ordens obtidas (autenticado)")
+                self.logger.info(f"✅ {len(orders)} orders obtained (authenticated)")
                 return orders
             else:
                 self.logger.error(f"❌ Erro na busca autenticada: {response.text}")
@@ -779,30 +779,30 @@ class PacificaAuth:
             return None
 
     # ============================================================================
-    # FUNÇÕES PÚBLICAS (NÃO PRECISAM DE AUTENTICAÇÃO)
+    # PUBLIC FUNCTIONS (NO AUTHENTICATION NEEDED)
     # ============================================================================
 
     def test_connection(self) -> bool:
-        """Testa a conexão usando get_funding_history (endpoint público)"""
+        """Tests connection using get_funding_history (endpoint público)"""
         try:
-            self.logger.info("🔍 Testando conexão com API...")
+            self.logger.info("🔍 Testing connection with API...")
             
             # Usar endpoint público que funciona
             result = self.get_funding_history("BTC")
             
             if result:
-                self.logger.info("✅ Conexão com API funcionando!")
+                self.logger.info("✅ API connection working!")
                 return True
             else:
                 self.logger.error("❌ Falha no teste de conexão")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"❌ Erro no teste de conexão: {e}")
+            self.logger.error(f"❌ Error in connection test: {e}")
             return False
 
     def get_funding_history(self, symbol: str = "BTC", limit: int = 10, offset: int = 0) -> Optional[Dict]:
-        """Busca histórico de funding rate (endpoint público)"""
+        """Fetches funding rate history (endpoint público)"""
         url = f"{self.base_url}/funding_rate/history"
         params = {'symbol': symbol, 'limit': limit, 'offset': offset}
         try:
@@ -815,7 +815,7 @@ class PacificaAuth:
             return None
 
     def get_prices(self) -> Optional[Dict]:
-        """Busca preços atuais (endpoint público)"""
+        """Fetches current prices (endpoint público)"""
         url = f"{self.base_url}/info/prices"
         try:
             response = requests.get(url, timeout=10)
@@ -843,7 +843,7 @@ class PacificaAuth:
             return None
 
     def get_symbol_info(self, symbol: str = None) -> Optional[Dict]:
-        """Busca informações específicas de um símbolo (endpoint público)"""
+        """Fetches specific symbol information (endpoint público)"""
         url = f"{self.base_url}/info"
         try:
             response = requests.get(url, timeout=10)
@@ -880,7 +880,7 @@ class PacificaAuth:
             return None
 
     def get_market_info(self, symbol: str = "BTC") -> Optional[Dict]:
-        """Busca informações do mercado (endpoint público)"""
+        """Fetches market information (endpoint público)"""
         url = f"{self.base_url}/info"
         try:
             response = requests.get(url, timeout=10)
@@ -911,7 +911,7 @@ class PacificaAuth:
     def get_historical_data(self, symbol: str, interval: str = "1m", 
                        periods: int = 30, max_retries: int = 3) -> Optional[List[float]]:
         """
-        Busca histórico de preços da API Pacifica com:
+        Fetches price history from Pacifica API com:
         ✅ Cache inteligente (90s TTL)
         ✅ Rate limit protection (1.2s entre requests)
         ✅ Circuit breaker (pausa quando API sobrecarregada)
@@ -1159,7 +1159,7 @@ class PacificaAuth:
     # ============================================================================
 
     def _get_tick_size(self, symbol: str) -> float:
-        """Obtém tick_size específico do símbolo"""
+        """Gets symbol-specific tick_size"""
         try:
             info = self.get_symbol_info(symbol)
             if info and 'tick_size' in info:
@@ -1183,7 +1183,7 @@ class PacificaAuth:
         return fallback
 
     def _get_lot_size(self, symbol: str) -> float:
-        """Obtém lot_size específico do símbolo"""
+        """Gets symbol-specific lot_size"""
         try:
             info = self.get_symbol_info(symbol)
             if info and 'lot_size' in info:
@@ -1214,7 +1214,7 @@ class PacificaAuth:
 
     def _round_to_lot_size(self, quantity: float, lot_size: float) -> float:
         """
-        Arredonda quantidade para múltiplo válido do lot_size
+        Rounds quantity to valid multiple of lot_size
         """
         if lot_size >= 1:
             # Para lot_size >= 1, usar números inteiros
@@ -1243,7 +1243,7 @@ class PacificaAuth:
 
     def _round_to_tick_size(self, price: float, tick_size: float) -> float:
         """
-        Arredonda preço para múltiplo válido do tick_size
+        Rounds price to valid multiple of tick_size
         🔧 BASEADO NO grid_calculator.py que já funciona
         """
         
@@ -1273,13 +1273,13 @@ class PacificaAuth:
             return round(result, 8)  # Máximo de 8 decimais para crypto
 
     def clear_historical_cache(self):
-        """Limpa o cache de histórico (útil para forçar refresh)"""
+        """Clears historical cache (útil para forçar refresh)"""
         cleared_count = len(self._historical_cache)
         self._historical_cache.clear()
         self.logger.info(f"🧹 Cache de histórico limpo ({cleared_count} entradas removidas)")
 
     def get_cache_stats(self) -> dict:
-        """Retorna estatísticas do cache"""
+        """Returns cache statistics"""
         return {
             'cache_size': len(self._historical_cache),
             'consecutive_errors': self._consecutive_errors,
@@ -1293,7 +1293,7 @@ class PacificaAuth:
     
     def get_positions(self, symbol: str = None) -> Optional[List]:
         """
-        Busca posições abertas da conta
+        Fetches open positions from account
         Args:
             symbol: Filtrar por símbolo específico (opcional)
         Returns:
@@ -1408,7 +1408,7 @@ class PacificaAuth:
     
     def _try_positions_endpoint(self, symbol: str = None) -> Optional[List]:
         """
-        Tenta endpoints alternativos para buscar posições
+        Tries alternative endpoints to fetch positions
         """
         # Lista de endpoints possíveis para tentar
         endpoints_to_try = [
@@ -1457,7 +1457,7 @@ class PacificaAuth:
     
     def _try_authenticated_positions_endpoint(self, endpoint: str, symbol: str = None) -> Optional[List]:
         """
-        Tenta endpoint de posições com autenticação
+        Tries positions endpoint with authentication
         """
         try:
             timestamp = int(time.time() * 1_000)
@@ -1507,57 +1507,57 @@ class PacificaAuth:
 
 def main():
     print("=" * 80)
-    print("🔒 PACIFICA API - AGENT WALLET (SEM PRIVATE KEY)")
+    print("🔒 PACIFICA API - AGENT WALLET (NO PRIVATE KEY)")
     print("=" * 80)
 
     try:
-        # Inicializar autenticação com Agent Wallet
+        # Initialize authentication with Agent Wallet
         auth = PacificaAuth()
         
         print("\n🔍 Testando conexão...")
         if auth.test_connection():
-            print("✅ Teste de conexão bem-sucedido!")
+            print("✅ Connection test successful!")
             
-            print("\n📊 Buscando preços atuais...")
+            print("\n📊 Getting current prices...")
             prices = auth.get_prices()
             if prices:
                 print("✅ Preços obtidos com sucesso!")
                 print(json.dumps(prices, indent=2)[:500])
             
-            print("\n📈 Buscando informações do mercado BTC...")
+            print("\n📈 Getting BTC market information...")
             market_info = auth.get_market_info("BTC")
             if market_info:
-                print("✅ Informações do mercado obtidas!")
+                print("✅ Market information obtained!")
                 print(json.dumps(market_info, indent=2)[:500])
             
-            print("\n💰 Testando informações da conta...")
+            print("\n💰 Testing account information...")
             account_info = auth.get_account_info()
             if account_info:
-                print("✅ Informações da conta obtidas!")
+                print("✅ Account information obtained!")
                 print(json.dumps(account_info, indent=2)[:500])
             
-            print("\n📋 Testando ordens abertas...")
+            print("\n📋 Testing open orders...")
             orders = auth.get_open_orders()
             if orders is not None:
-                print(f"✅ {len(orders)} ordens abertas encontradas!")
+                print(f"✅ {len(orders)} open orders found!")
                 
-            print("\n📊 Testando posições abertas...")
+            print("\n📊 Testing open positions...")
             positions = auth.get_positions()
             if positions is not None:
-                print(f"✅ {len(positions)} posições encontradas!")
+                print(f"✅ {len(positions)} positions found!")
                 if positions:
-                    print("Primeira posição:")
+                    print("First position:")
                     print(json.dumps(positions[0], indent=2))
                 
         else:
             print("❌ Falha no teste de conexão")
 
     except Exception as e:
-        print(f"❌ Erro na inicialização: {e}")
+        print(f"❌ Initialization error: {e}")
         traceback.print_exc()
 
     print("\n" + "=" * 80)
-    print("🔒 Teste Agent Wallet concluído!")
+    print("🔒 Test Agent Wallet completed!")
     print("=" * 80)
 
 if __name__ == "__main__":
