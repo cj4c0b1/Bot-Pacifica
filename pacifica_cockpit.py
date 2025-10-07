@@ -173,19 +173,42 @@ class DataCollector:
             # Import and initialize position manager
             from src.position_manager import PositionManager
             from src.pacifica_auth import PacificaAuth
-            
+
             # Initialize auth client (you may need to adjust this based on your setup)
             auth_client = PacificaAuth()
             position_manager = PositionManager(auth_client)
-            
+
+            # Test API connectivity first
+            try:
+                test_prices = auth_client.get_prices()
+                if not test_prices or not test_prices.get('success'):
+                    self.logger.warning("⚠️ API not responding properly for prices")
+                    raise Exception("API connectivity issue")
+            except Exception as api_error:
+                self.logger.error(f"❌ API connectivity failed: {api_error}")
+                # Return mock data with error indicator
+                return [{
+                    'symbol': 'API_ERROR',
+                    'quantity': 0,
+                    'entry_price': 0,
+                    'current_price': 0,
+                    'pnl': 0,
+                    'error': f'API Error: {str(api_error)[:50]}...'
+                }]
+
             # Get position summary
             summary = position_manager.get_position_summary()
-            
+
             if summary and 'positions' in summary:
                 positions = []
                 for pos in summary['positions']:
                     # Get current price for each position
-                    current_price = position_manager._get_current_price(pos['symbol'])
+                    try:
+                        current_price = position_manager._get_current_price(pos['symbol'])
+                    except Exception as price_error:
+                        self.logger.warning(f"⚠️ Failed to get price for {pos['symbol']}: {price_error}")
+                        current_price = 0.0
+
                     if current_price > 0:
                         positions.append({
                             'symbol': pos['symbol'],
@@ -196,17 +219,34 @@ class DataCollector:
                             'pnl_percent': pos['pnl_percent'],
                             'liquidation_price': pos.get('liquidation_price', 0)
                         })
+                    else:
+                        # Still include the position but mark it as having price issues
+                        positions.append({
+                            'symbol': pos['symbol'],
+                            'quantity': pos['size'],
+                            'entry_price': pos['entry_price'],
+                            'current_price': 0.0,
+                            'pnl': 0.0,
+                            'pnl_percent': 0.0,
+                            'liquidation_price': pos.get('liquidation_price', 0),
+                            'price_error': f'Unable to fetch price for {pos["symbol"]}'
+                        })
+
                 return positions
-            
+
             return []
-            
+
         except Exception as e:
             self.logger.error(f"Error getting real positions: {e}")
-            # Fallback to mock data if position manager fails
-            return [
-                {'symbol': 'BTCUSDT', 'quantity': 0.001, 'entry_price': 45000, 'current_price': 46000, 'pnl': 100},
-                {'symbol': 'ETHUSDT', 'quantity': 0.1, 'entry_price': 3000, 'current_price': 3100, 'pnl': 20}
-            ]
+            # Return detailed error information
+            return [{
+                'symbol': 'ERROR',
+                'quantity': 0,
+                'entry_price': 0,
+                'current_price': 0,
+                'pnl': 0,
+                'error': f'Position Manager Error: {str(e)[:100]}...'
+            }]
 
     def _get_orders(self):
         """Get real orders data from position manager"""
@@ -547,23 +587,77 @@ class PacificaCockpit:
             # Create DataFrame for better display
             df = pd.DataFrame(positions)
 
-            # Display positions in cards
+            # Display positions in cards - handle error cases
             cols = st.columns(min(len(positions), 3))
             for i, pos in enumerate(positions):
                 with cols[i % 3]:
-                    pnl_color = "normal" if pos['pnl'] >= 0 else "inverse"
-                    st.metric(
-                        label=f"{pos['symbol']}",
-                        value=f"${pos['current_price']:.2f}",
-                        delta=f"${pos['pnl']:.2f}",
-                        delta_color="normal" if pos['pnl'] >= 0 else "inverse"
-                    )
+                    # Handle error cases
+                    if 'error' in pos:
+                        st.error(f"❌ {pos['error']}")
+                        st.metric(label=f"{pos['symbol']}", value="Error", delta="Check logs")
+                    elif 'price_error' in pos:
+                        st.warning(f"⚠️ {pos['price_error']}")
+                        st.metric(
+                            label=f"{pos['symbol']}",
+                            value=f"${pos['entry_price']:.4f}",
+                            delta="Price unavailable",
+                            delta_color="off"
+                        )
+                    else:
+                        pnl_color = "normal" if pos['pnl'] >= 0 else "inverse"
+                        st.metric(
+                            label=f"{pos['symbol']}",
+                            value=f"${pos['current_price']:.4f}",
+                            delta=f"${pos['pnl']:.2f}",
+                            delta_color=pnl_color
+                        )
 
-            # Detailed table
+            # Enhanced detailed table with error handling
             st.subheader("Position Details")
-            st.dataframe(df, use_container_width=True)
+
+            # Handle error columns
+            if 'error' in df.columns:
+                # Show error rows differently
+                error_rows = df[df['error'].notna()]
+                normal_rows = df[df['error'].isna()]
+
+                if not error_rows.empty:
+                    st.error("❌ **API/Connection Errors Detected:**")
+                    st.dataframe(error_rows[['symbol', 'error']], use_container_width=True)
+
+                if not normal_rows.empty:
+                    # Show normal positions
+                    display_df = normal_rows.drop(columns=['error', 'price_error'] if 'price_error' in normal_rows.columns else ['error'])
+                    st.dataframe(display_df, use_container_width=True)
+            else:
+                # Normal display
+                st.dataframe(df, use_container_width=True)
+
+            # Show position count
+            real_positions = [p for p in positions if 'error' not in p and 'price_error' not in p]
+            if real_positions:
+                st.success(f"✅ Found {len(real_positions)} active position(s)")
+            else:
+                st.warning("⚠️ No positions with valid data found")
+
         else:
-            st.info("No active positions")
+            st.info("🔄 Loading position data...")
+
+            # Try to show direct position data for debugging
+            try:
+                from src.position_manager import PositionManager
+                from src.pacifica_auth import PacificaAuth
+
+                auth_client = PacificaAuth()
+                position_manager = PositionManager(auth_client)
+                summary = position_manager.get_position_summary()
+
+                if summary and summary.get('position_count', 0) > 0:
+                    st.info(f"💡 Position manager shows {summary['position_count']} position(s) - check API connectivity")
+                else:
+                    st.info("💡 No positions found in position manager")
+            except Exception as e:
+                st.error(f"❌ Cannot connect to position manager: {e}")
 
     def _render_orders_tab(self):
         st.header("📋 Live Orders")
