@@ -7,6 +7,10 @@ __pycache__/
 *.egg-info/
 .dist/
 .build/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
 # Envs
 .env*
@@ -23,6 +27,22 @@ logs/
 tests
 update
 data/
+
+# Redis
+*.rdb
+*.aof
+redis-dump.rdb
+redis-*.conf
+
+# Windsurf
+.windsurf/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
