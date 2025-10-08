@@ -420,6 +420,11 @@ class GridRiskManager:
     def _calculate_position_pnl(self, symbol: str, current_price: float) -> Optional[Dict]:
         # self.logger.info(f"*** _calculate_position_pnl CALLED ***")
 
+        # Add debugging: Log all available symbols and check for exact match
+        available_symbols = list(self.position_mgr.positions.keys())
+        self.logger.info(f"*** DEBUG: Available symbols in positions: {available_symbols} ***")
+        self.logger.info(f"*** DEBUG: Looking for symbol: '{symbol}' (exact string) ***")
+
         # Tentar obter do cache primeiro
         if symbol not in self.position_mgr.positions:
             self.logger.info(f"*** SYMBOL {symbol} NOT IN positions - UPDATING... ***")
@@ -427,9 +432,15 @@ class GridRiskManager:
             # Forçar atualização
             self.position_mgr.update_account_state()
             
-            # Verificar novamente
-            if symbol not in self.position_mgr.positions:
+            # Re-check after update and log details
+            available_symbols_after = list(self.position_mgr.positions.keys())
+            self.logger.info(f"*** DEBUG: Available symbols after update: {available_symbols_after} ***")
+            if symbol in self.position_mgr.positions:
+                pos = self.position_mgr.positions[symbol]
+                self.logger.info(f"*** DEBUG: Found {symbol} position: {pos} ***")
+            else:
                 self.logger.info(f"*** STILL NOT FOUND after update ***")
+                self.logger.info(f"*** DEBUG: Position data is empty or missing {symbol} ***")
                 return None
         
         position = self.position_mgr.positions[symbol]

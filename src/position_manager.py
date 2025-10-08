@@ -315,6 +315,8 @@ class PositionManager:
             # Buscar posições pela API (mesmo método que funciona)
             positions_response = self.auth.get_positions()
             
+            # Add debugging: Log the raw API response for positions
+            self.logger.info(f"*** DEBUG: Raw API response for positions: {positions_response} ***")
             if not positions_response:
                 self.logger.warning("Sem dados de posições")
                 self.positions.clear()
@@ -328,6 +330,9 @@ class PositionManager:
                 symbol = pos.get('symbol')
                 if not symbol:
                     continue
+                
+                # Add debugging: Log each position being processed
+                self.logger.info(f"*** DEBUG: Processing position for symbol: {symbol} - Data: {pos} ***")
                 
                 # ✅ USAR CAMPOS CORRETOS DA API
                 amount = abs(float(pos.get('amount', 0)))
@@ -353,6 +358,8 @@ class PositionManager:
                 
                 self.logger.info(f"✅ Posição {symbol}: {quantity:+.4f} @ ${entry_price:.4f}")
             
+            # Add debugging: Log final positions dict
+            self.logger.info(f"*** DEBUG: Final positions dict after loading: {self.positions} ***")
             self.logger.info(f"📍 {len(self.positions)} posições carregadas: {list(self.positions.keys())}")
             
         except Exception as e:
@@ -427,6 +434,7 @@ class PositionManager:
             self.logger.info("=" * 70)
 
             if positions_count > 0:
+                self.logger.info(f"*** DEBUG: Calling _load_positions_from_api because positions_count={positions_count} ***")
                 self._load_positions_from_api()
         
             return True
